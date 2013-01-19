@@ -1,0 +1,933 @@
+#!/usr/bin/python
+#
+# check_psinfo - processinformations with perfdata
+#
+# part of nagdog
+#
+# please note, some checks like users/net/cpu/iowait are linux-based
+# and *might* work on any *unix if you have the right programs installed
+#
+#
+# Requirements:
+#    - python 2.5 or later
+#    - python-psutil-0.2.0 or later (0.2.1 for -t uptime)
+#    - -t net -> netstat -altn
+#    - -t users -> users
+#    - -t iowait / -t iostat -> iostat
+#
+#
+#
+# (c) copyright 2010,2011,2012,2013 dogtown@mare-system.de
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+#
+#
+# v 0.4.8.r25 - AALPHAA - 2013-01-18
+#
+
+
+import psutil as ps
+import getopt, sys, time, os, string, socket
+import fcntl, struct
+
+
+ctype = "none"
+return_status="UNKNOWN"
+return_exit=3
+return_text="no return (default)"
+return_perfdata="none"
+
+
+def psinfo_help():
+    print """
+
+check_psinfo
+    nagios_plugin to check processinfo (mem, cpu, running procs)
+    and returns perfdata
+    
+    USAGE
+     check_psinfo -t [type] [options]
+    
+    TYPES
+      -t mem    check memory 
+                -w usage in %
+                -c usage in %s
+                eg -w 80 -c 90 
+                
+                -p proc_name
+                -w usage in mb
+                -c usage in mb
+                eg -p apache2 -w 1024 -c 2048
+                 
+
+      -t proc   check for processes
+                -w total nr of procs
+                -c total nr of procs
+                -p proc_name 
+                eg -p apache -c 150 -w 300
+                returns CRITICAL if no processes are found 
+                
+      -t cpu    check cpu_usage
+                -w X,Y,Z warn-load for 1,5,15 min avg
+                -c X,Y,Z crit-load for 1,5,15 min avg
+                
+                this might not run on systems without /proc - filesystem
+                
+                *** Please Note: this is a relative value, depending on your 
+                ammount of available processors
+                
+                
+                C > W > procs.OK < w < c 
+                
+                
+      -t net    check net-connections
+                -w [nr] warn-nr of connections
+                -c [nr] crit-nr of connections
+                -l [nr] localport  (tcp) *** 
+                -r [nr] remoteport (tcp) *** 
+                -p [name] proc_name
+                
+                if yout want to check for net_conns on servers like apache
+                you need to execute this script with sudo-rights. 
+      
+      -t uptime checks the actual uptime
+                -w [days] -> warning_number of days uptime
+                -c [days] -> critical_number of days uptime
+                ***
+
+      -t users  checks for logged_in users (tested on linux)
+                -w [nr]   -> warning_number of user_logins
+                -c [nr]   -> critical_number of user_logins
+                ***
+
+      -t iowait check for current iowait - status
+                -w [nr] warn-% for iowait
+                -c [nr] crit-% for iowait
+
+      -t iostat check for global iowait - status
+                -w [nr] warn-% for iowait
+                -c [nr] crit-% for iowait
+      
+      -t iface  check if network_interface [ if ] is up, CRITICAL if not
+                -n if  - give interface-name like eth0 / virbr0 etc, defaults to eth0
+                -i ip  - check if given ip is found on that interface, 
+                         CRITICAL if not
+                ***
+                
+    *** -> experimental option, not yet well tested or not fully
+           implemented, DONT TRY THIS AT HOME!
+        
+    """
+
+
+def return_result():
+    end_time = time.time()
+    run_time = str(end_time - start_time )[0:8]
+    if return_perfdata == "none":
+        perfdata = "run_time=%s;" % run_time
+    else:
+        if return_perfdata[-1] != ";":
+            perfdata = "%s; run_time=%s;" % (return_perfdata, run_time)
+        else:
+            perfdata = "%s run_time=%s" % (return_perfdata, run_time)
+    print "PSInfo.%s %s %s | %s " % (ctype.upper(), return_status, return_text, perfdata)
+    sys.exit(return_exit)
+
+
+def psinfo_cpu():
+    """
+    not yet ready
+    """    
+    
+    global return_status, return_text, return_perfdata, return_exit
+    
+    return_status="UNKNOWN"
+    return_exit=3
+    return_text="not yet implemented"
+    return_perfdata="none"
+    return_result()
+
+
+
+def psinfo_uptime():
+    """
+    """    
+    
+    global return_status, return_text, return_perfdata, return_exit
+    
+    # defaults
+    wd = 180    
+    cd = 360
+
+    now_time = time.time()
+    boot_time = ps.BOOT_TIME
+    up_time = now_time - boot_time
+    up_days = int(up_time / 86400)
+
+    if up_days == 0:
+        up_txt = "< 24hrs (%s min up)" % (int(up_time/60))
+    elif up_days == 1:
+        up_txt = "1 day"
+    else:
+        up_txt = "%s days" % up_days
+
+    if up_time  > (cd * 86400):
+        return_status="CRITICAL"
+        return_exit=2
+        return_text="%s" % (up_txt)
+        return_perfdata="uptime=%s days;" % up_days
+        return_result()
+
+    elif up_time  > (wd * 86400):
+        return_status="WARNING"
+        return_exit=1
+        return_text="%s" % (up_txt)
+        return_perfdata="uptime=%s days;" % up_days
+        return_result()
+    else:
+        return_status="OK"
+        return_exit=0
+        return_text="%s" % (up_txt)
+        return_perfdata="uptime=%s days;" % up_days
+        return_result()
+
+def psinfo_iface(iface):
+    
+    global return_status, return_text, return_exit
+    
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sockfd = sock.fileno()
+    SIOCGIFADDR = 0x8915
+    ifreq = struct.pack('16sH14s', iface, socket.AF_INET, '\x00'*14)
+    try:
+        res = fcntl.ioctl(sockfd, SIOCGIFADDR, ifreq)
+    except:
+        return_status="CRITICAL"
+        return_exit=2
+        return_text="IFace %s is DOWN / No IP given" % (iface)
+        return_result()
+
+    xip = struct.unpack('16sH2x4s8x', res)[2]
+    sip = socket.inet_ntoa(xip)
+    if sip == None:
+        return_status="CRITICAL"
+        return_exit=2
+        return_text="IFace %s is DOWN" % (iface)
+        return_result()
+    if ip == "no":
+        return_status="OK"
+        return_exit=0
+        return_text="IFace %s is UP" % (iface)
+        return_result()        
+
+    if sip == ip:
+        return_status="OK"
+        return_exit=0
+        return_text="IFace %s is UP / IP = %s" % (iface, sip)
+        return_result()        
+    else:
+        return_status="CRITICAL"
+        return_exit=2
+        return_text="IFace %s is UP / IP should be: %s is: %s" % (iface, ip, sip)
+        return_perfdata=""
+        return_result()        
+
+    return_status="UNKNOWN"
+    return_exit=0
+    return_text="IFace %s is UP / IP = %s " % (iface, ip)
+    return_result()        
+
+
+def psinfo_net():
+    """
+    psinfo_net -> show net_status (using netstat -aln)
+    
+    """    
+
+    global return_status, return_text, return_perfdata, return_exit
+    
+    w = 100
+    c = 250
+    
+    
+    l_port = lv
+    r_port = rv
+    
+    if wv != "no":
+        try:
+            w = int(wv)
+        except:
+            pass        
+        try:
+            c = int(cv)
+        except:
+            pass                
+        
+    n_c = 0
+    port_info = ""
+    net_stat = os.popen("netstat -altn").readlines()
+    #n_c = len(net_stat)
+    for line in net_stat:
+        lx = line.split()
+        try:
+            lo = lx[3].strip()
+            re = lx[4].strip()
+            lop = string.split(lo, ":")[1].strip()
+            rep = string.split(re, ":")[1].strip()
+        except:
+            continue
+        if l_port != "no":
+            port_info = "[ local:%s ]" % l_port
+            try:
+                if int(lop) == int(l_port):
+                    n_c += 1
+                continue
+            except:
+                continue
+                
+        elif r_port != "no":
+            port_info = "[ remote:%s ]" % r_port    
+            try:
+                if int(rep) == int(r_port):
+                    n_c += 1
+                continue    
+            except:
+                continue
+        n_c += 1
+
+    if wv == "no":
+        return_status="OK"
+        return_exit=0
+        return_text="net_connections %s %s " % (n_c, port_info)
+        return_perfdata="net_con=%s;" % (n_c)
+        return_result()
+        
+    if n_c >= c:
+        return_status="CRITICAL"
+        return_exit=2
+        return_text="Too many net_connections %s %s " % (n_c, port_info)
+        return_perfdata="net_con=%s;%s;%s;" % (n_c, w, c)
+        return_result()
+    
+    elif n_c >= w:
+        return_status="WARNING"
+        return_exit=1
+        return_text="Too many net_connections %s %s " % (n_c, port_info)
+        return_perfdata="net_con=%s;%s;%s;" % (n_c, w, c)
+        return_result()
+    
+    return_status="OK"
+    return_exit=0
+    return_text="net_connections within limits %s %s " % (n_c, port_info)
+    return_perfdata="net_con=%s;%s;%s;" % (n_c, w, c)
+    return_result()
+            
+
+def psinfo_iowait():
+    """
+    psinfo_iowait -> show iowait_status (needs iostat)
+    
+    """    
+
+    global return_status, return_text, return_perfdata, return_exit
+    
+    w = 20
+    c = 40
+    
+    
+    if wv != "no":
+        try:
+            w = int(wv)
+        except:
+            pass        
+        try:
+            c = int(cv)
+        except:
+            pass                
+        
+    io_wait = os.popen("iostat -c 1 2").readlines()
+    #n_c = len(net_stat)
+    lc = 0
+    wl = 0
+    wf = "no"
+    for line in io_wait:
+        
+        if line.find("iowait") > 1:
+            if lc < 4:
+                lc += 1
+                continue
+                
+            try:
+                wl = io_wait[lc+1].split()[3].replace(",", ".")
+                wf = "yes"
+                break
+            except:
+                pass 
+        lc += 1
+
+    if wf == "no":
+        return_text = "no value for iowait found"
+        return_exit()
+            
+    if wv == "no":
+        return_status="OK"
+        return_exit=0
+        return_text="io_wait_status -> %s " % (wl)
+        return_perfdata="io_wait=%s;" % (wl)
+        return_result()
+        
+    if float(wl) >= float(c):
+        return_status="CRITICAL"
+        return_exit=2
+        return_text="IO_WAIT Too High -> %s  " % (wl)
+        return_perfdata="io_wait=%s;%s;%s;" % (wl, w, c)
+        return_result()
+    
+    elif float(wl) >= float(w):
+        return_status="WARNING"
+        return_exit=1
+        return_text="IO_WAIT High -> %s  " % (wl)
+        return_perfdata="io_wait=%s;%s;%s;" % (wl, w, c)
+        return_result()
+    
+    return_status="OK"
+    return_exit=0
+    return_text="io_wait within limits %s " % (wl)
+    return_perfdata="io_wait=%s;%s;%s;" % (wl, w, c)
+    return_result()
+
+
+def psinfo_iostat():
+    """
+    psinfo_iostat -> show global iowait_status (needs iostat)
+    
+    """    
+
+    global return_status, return_text, return_perfdata, return_exit
+    
+    w = 20
+    c = 40
+    
+    
+    if wv != "no":
+        try:
+            w = int(wv)
+        except:
+            pass        
+        try:
+            c = int(cv)
+        except:
+            pass                
+        
+    io_wait = os.popen("iostat -c").readlines()
+    #n_c = len(net_stat)
+    lc = 0
+    wl = 0
+    wf = "no"
+    for line in io_wait:
+        
+        if line.find("iowait") > 1:
+                
+            try:
+                wl = io_wait[lc+1].split()[3].replace(",", ".")
+                wf = "yes"
+                break
+            except:
+                pass 
+        lc += 1
+
+    if wf == "no":
+        return_text = "no value for iowait found"
+        return_exit()
+            
+    if wv == "no":
+        return_status="OK"
+        return_exit=0
+        return_text="io_stat_status -> %s " % (wl)
+        return_perfdata="io_stat=%s;" % (wl)
+        return_result()
+        
+    if float(wl) >= float(c):
+        return_status="CRITICAL"
+        return_exit=2
+        return_text="IO_STAT Too High -> %s  " % (wl)
+        return_perfdata="io_stat=%s;%s;%s;" % (wl, w, c)
+        return_result()
+    
+    elif float(wl) >= float(w):
+        return_status="WARNING"
+        return_exit=1
+        return_text="IO_STAT High -> %s  " % (wl)
+        return_perfdata="io_stat=%s;%s;%s;" % (wl, w, c)
+        return_result()
+    
+    return_status="OK"
+    return_exit=0
+    return_text="io_stat within limits %s " % (wl)
+    return_perfdata="io_stat=%s;%s;%s;" % (wl, w, c)
+    return_result()
+            
+
+def psinfo_proc():
+    """
+    
+    """    
+    global return_status, return_text, return_perfdata, return_exit
+    
+    # defaults
+    w = 5
+    c = 10
+    
+    
+
+    xll = ps.get_pid_list()
+    proc_c = 0
+    p_c = 0
+    for pid in xll:
+        p_c += 1
+        try:
+            pn = ps.Process(pid)
+            pn = pn.name
+        except:
+            continue
+            
+        if pn == pv:
+            proc_c +=1
+
+
+    if pv == "no":
+        return_status="OK"
+        return_exit=0
+        return_text="%s procs running)" % (p_c)
+        return_perfdata="procs=%s;" % p_c
+        return_result()     
+
+    if wv == "no":
+        if proc_c > 0:
+            return_status="OK"
+            return_exit=0
+            return_text="%s (%s procs running)" % (pv, proc_c)
+            return_perfdata="procs=%s;" % proc_c
+            return_result()
+        else:
+            return_status="CRITICAL"
+            return_exit=2
+            return_text="No processes found for %s " % pv
+            return_perfdata="procs=0;"
+            return_result()
+    
+    else:
+        try:
+            w = int(wv)
+        except:
+            pass
+    
+        try:
+            c = int(cv)
+        except:
+            pass
+
+        if proc_c > 0:
+            pass
+        else:
+            return_status="CRITICAL"
+            return_exit=2
+            return_text="No processes found for %s " % pv
+            return_perfdata="procs=0;"
+            return_result()
+
+
+        if proc_c > c:
+            return_status="CRITICAL"
+            return_exit=2
+            return_text="Too many processes for %s (%s procs running)" % (pv, proc_c)
+            return_perfdata="procs=%s;%s;%s;" % (proc_c, w, c)
+            return_result()
+        
+        elif proc_c > w:
+            return_status="WARNING"
+            return_exit=1
+            return_text="Too many processes for %s (%s procs running)" % (pv, proc_c)
+            return_perfdata="procs=%s;%s;%s;" % (proc_c, w, c)
+            return_result()
+        
+        return_status="OK"
+        return_exit=0
+        return_text=" %s (%s procs running)" % (pv, proc_c)
+        return_perfdata="procs=%s;%s;%s;" % (proc_c, w, c)
+        return_result()
+    
+    
+
+
+    return_result()
+
+def psinfo_mem():
+    """
+    defaults: 
+        w: 80%
+        c: 90%
+        
+    """    
+    
+    global return_status, return_text, return_perfdata, return_exit
+    
+    w = 80
+    c = 90
+    
+    if pv != "no":
+        if wv == "no":
+            return_status="UNKNOWN"
+            return_exit=3
+            return_text="please use -w -c"
+            return_perfdata="none"
+            return_result()
+
+        try:
+            w = int(wv)
+        except:
+            print "-w must be integer"
+            sys.exit(3)
+    
+        try:
+            c = int(cv)
+        except:
+            print "-c must be integer"
+            sys.exit(3)
+
+       
+        xll = ps.get_pid_list()
+        proc_c = 0
+        mem_c = 0
+        for pid in xll:
+            try:
+                px = ps.Process(pid)
+                pn = px.name
+                pm = px.get_memory_info()
+            except:
+                continue
+                
+            if pn == pv:
+                proc_c += 1
+                mem_c = mem_c +  pm[0]
+        mem_c_mb = mem_c / (1024*1024)
+        
+        if proc_c > 0:
+            pass
+        else:
+            return_status="CRITICAL"
+            return_exit=2
+            return_text="No processes found for %s " % pv
+            return_perfdata="procs=0;"
+            return_result()
+
+        
+        if mem_c_mb >= c:
+            return_status="CRITICAL"
+            return_exit=2
+            return_text="Too much memory for process %s (%s MB)" % (pv, mem_c_mb)
+            return_perfdata="proc_mem=%s;%s;%s;" % (mem_c_mb, w, c)
+            return_result()
+        
+        elif mem_c_mb >= w:
+            return_status="WARNING"
+            return_exit=1
+            return_text="Too much memory for process %s (%s MB)" % (pv, mem_c_mb)
+            return_perfdata="proc_mem=%s;%s;%s;" % (mem_c_mb, w, c)
+            return_result()
+        
+        return_status="OK"
+        return_exit=0
+        return_text="Memory within limits for process %s (%s MB)" % (pv, mem_c_mb)
+        return_perfdata="proc_mem=%s;%s;%s;" % (mem_c_mb, w, c)
+        return_result()
+                    
+        
+
+    
+    if wv != "no":
+        wxv = wv.replace("%", "")
+        try:
+            w = int(wxv)
+        except:
+            pass
+    
+    if cv != "no":
+        cxv = cv.replace("%", "")
+        try:
+            c = int(cxv)
+        except:
+            pass
+    
+    totalm  = ps.TOTAL_PHYMEM
+    usedm   = ps.used_phymem()
+    freem   = ps.avail_phymem()
+
+    total_buff = ps.phymem_buffers()
+    total_cache = ps.cached_phymem()
+
+    real_used = usedm - total_buff - total_cache
+    real_free = totalm - real_used
+    
+    total_mb = int(totalm / (1024*1024))
+    used_mb  = int(usedm / (1024*1024))    
+    free_mb  = int(freem / (1024*1024))    
+
+    realu_mb = int(real_used / (1024*1024))    
+    realf_mb = int(real_free / (1024*1024))    
+    
+    warn_value = int(total_mb * w / 100)
+    crit_value = int(total_mb * c / 100)
+    
+    #print "t: %s :: f: %s :: u: %s  :: ru : %s :: rf: %s" % (total_mb, free_mb, used_mb, realu_mb, realf_mb)
+
+    used_ratio = real_used * 100 / totalm
+
+    return_perfdata = "free_mb=%s;%s;%s; used_mb=%s;%s;%s; total_mb=%s;%s;%s;" % (realf_mb, warn_value, crit_value, realu_mb, warn_value, crit_value, total_mb, warn_value, crit_value )
+
+    if used_ratio >= c:
+        return_status = "CRITICAL"
+        return_exit = 2
+        return_text = "Very Low Memory (%s %s used of %sMB ) " % (used_ratio, "%", total_mb)  
+        return_result()
+    if used_ratio >= w:
+        return_status = "WARNING"
+        return_exit = 1
+        return_text = "Low Memory (%s %s used of %sMB ) " % (used_ratio, "%", total_mb)  
+        return_result()
+
+    return_status = "OK"
+    return_exit = 0
+    return_text = "Memory (%s %s used of %sMB ) " % (used_ratio, "%", total_mb)  
+    return_result()
+    
+        
+    
+    
+    
+    
+
+try:
+    opts, args = getopt.getopt(sys.argv[1:], "s:c:w:t:p:l:r:i:n:hdz", 
+        ["help", "script", "debug" ])
+except getopt.GetoptError, err:
+    # print help information and exit:
+    print str(err) # will print something like "option -a not recognized"
+    psinfo_help()
+    sys.exit(2)
+
+
+wv= "no"
+cv = "no"
+pv = "no"
+lv = "no"
+rv = "no"
+ip = "no"
+ifd = "eth0"
+
+for o, a in opts:
+    #print "o :: " + o + "   <-->  a: " + a
+    if o in ("-h", "--help"):
+        psinfo_help()
+        sys.exit()
+        
+
+    elif o in ("-w", "--warning"):
+        wv = "%s" % a
+    elif o in ("-c", "--critical"):
+        cv = "%s" % a
+        
+    elif o == "-t":
+        ctype = "%s" % a
+    
+    elif o == "-d":
+        debug = "yes"
+
+    elif o == "-p":
+        pv = "%s" % a 
+
+    elif o == "-i":
+        ip = "%s" % a 
+
+    elif o == "-n":
+        ifd = "%s" % a 
+
+    elif o == "-l":
+        try:
+            lv = int(a)
+        except:
+            print "value for -l must be integer"
+            sys.exit(3)
+
+    elif o == "-r":
+        try:
+            rv = int(a)
+        except:
+            print "value for -r  must be integer"
+            sys.exit(3)
+            
+
+    
+    else:
+        psinfo_help()
+        sys.exit(2)        
+
+if len(sys.argv) == 1:
+    psinfo_help()
+    sys.exit(0)
+
+
+start_time = time.time()
+
+if ctype == "none":
+    psinfo_help()
+    sys.exit(0)
+
+elif ctype == "mem":
+    psinfo_mem()
+    return_result()
+    
+elif ctype == "cpu":
+    psinfo_cpu()
+    return_result()
+
+elif ctype in ("proc", "procs"):
+    psinfo_proc()
+    return_result()
+        
+elif ctype == "net":
+    psinfo_net()
+    return_result()
+
+elif ctype == "uptime":
+    psinfo_uptime()
+    return_result()
+
+elif ctype == "iowait":
+    psinfo_iowait()
+    return_result()
+
+
+elif ctype == "iostat":
+    psinfo_iostat()
+    return_result()
+
+elif ctype == "if":
+    psinfo_iface(ifd)
+    return_result()
+
+else:
+    psinfo_help()
+    sys.exit(2)
+    
+
+# 
+
+#~ meminfo
+#~ =======
+#~ 
+#~ In meminfo, you're probably most interested in the fields MemTotal and
+#~ MemFree (and possibly Buffers and Cached if you want to see how much
+#~ of the used memory is in fact cache rather than user programs). You
+#~ might also want to look at SwapTotal and SwapFree.
+#~ 
+#~ The following just dumps all the lines from /etc/meminfo into a
+#~ dictionary (str:int):
+#~ 
+#~ # I thought a regex would be the easiest way to do this.
+#~ import re
+#~ re_parser = re.compile(r'^(?P<key>\S*):\s*(?P<value>\d*)\s*kB' )
+#~ def meminfo():
+#~ """-> dict of data from meminfo (str:int).
+#~ Values are in kilobytes.
+#~ """
+#~ result = dict()
+#~ for line in open('/proc/meminfo'):
+#~ match = re_parser.match(line)
+#~ if not match:
+#~ continue # skip lines that don't parse
+#~ key, value = match.groups(['key', 'value'])
+#~ result[key] = int(value)
+#~ return result
+#~ 
+#~ 
+#~ stat
+#~ ====
+#~ /proc/stat contains the CPU info you need.
+#~ 
+#~ In stat, you can look at the first four fields of each "cpu" record,
+#~ for example on my machine:
+#~ $ cat /proc/stat
+#~ cpu 63888 1648769 11015 494 998 799 59339 0
+#~ cpu0 63888 1648769 11015 494 998 799 59339 0
+#~ intr 9483429 148 2 0 0 4 0 0 0 3 0 0 0 4 0 0 321118 105939 0 3 35085
+#~ 32465 8988658 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+#~ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+#~ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+#~ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+#~ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+#~ 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+#~ ctxt 4526886
+#~ btime 1201376745
+#~ processes 7197
+#~ procs_running 2
+#~ procs_blocked 0
+#~ 
+#~ The cpu record refers to all processor cores, while cpuN refers to
+#~ each CPU or CPU core individually.
+#~ 
+#~ Unless things are more complicated than they appear, to get the busy
+#~ time fraction:
+#~ 
+#~ def cpuusage():
+#~ """-> dict of cpuid : (usertime, nicetime, systemtime, idletime)
+#~ cpuid "cpu" means the total for all CPUs.
+#~ cpuid "cpuN" means the value for CPU N.
+#~ """
+#~ wanted_records = [line for line in open('/proc/stat') if
+#~ line.startswith('cpu')]
+#~ result = {}
+#~ for cpuline in wanted_records:
+#~ fields = cpuline.split()[:5]
+#~ data = map(int, fields[1:])
+#~ result[fields[0]] = tuple(data)
+#~ return result
+#~ 
+#~ The manpage points out that the contents of /proc/stat can vary by
+#~ architecture, though I would guess at least the "cpu" line would be
+#~ available on all.
+#~ 
+#~ 
+#~ loadavg
+#~ =======
+#~ You can get the load average and the other information in /proc/
+#~ loadavg with:
+#~ 
+#~ def loadavg():
+#~ """-> 5-tuple containing the following numbers in order:
+#~ - 1-minute load average (float)
+#~ - 5-minute load average (float)
+#~ - 15-minute load average (float)
+#~ - Number of threads/processes currently executing (<= number of
+#~ CPUs) (int)
+#~ - Number of threads/processes that exist on the system (int)
+#~ - The PID of the most recently-created process on the system (int)
+#~ """
+#~ loadavgstr = open('/proc/loadavg', 'r').readline().strip()
+#~ data = loadavgstr.split()
+#~ avg1, avg5, avg15 = map(float, data[:3])
+#~ threads_and_procs_running, threads_and_procs_total = map(int,
+#~ data[3].split('/'))
+#~ most_recent_pid = int(data[4])
+#~ return avg1, avg5, avg15, threads_and_procs_running,
+#~ threads_and_procs_total, most_recent_pid

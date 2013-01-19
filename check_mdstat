@@ -1,0 +1,91 @@
+#!/bin/sh
+#
+# nagios_plugin to check for linux_based 
+# softraids -> mdstat/raid_rebuild_indicators
+#
+# gpl'ed / (c) copyright 2011 mare-system.de
+# c: dogtown--[_at_]--mare-system--(dot)--de
+# v0.4.6 - 2012-05-13
+#
+
+
+EXIT_STATUS="3"
+EXIT_TEXT="UNKNOWN"
+PERF_DATA=""
+
+mdstat="/proc/mdstat"
+
+
+helpme() {
+
+    echo "
+
+CHECK_MDSTAT.SH
+
+    This plugin tests, if a raid-system is going through a
+    rebuild-process
+
+USAGE:
+
+    check_mdstat.sh 
+
+REMARKS
+    
+    Please note that this plugin checks linux-softraids only.
+    
+    if you use hardware-raidcontroller you might want to check
+    your raid-controller.
+    
+    Required: /proc/mdstat
+    
+
+    "
+
+
+}
+
+
+while getopts h opt
+do
+
+    case $opt in
+        *)
+        helpme
+        exit
+        ;;
+    esac
+    
+done
+
+if [ "$1" ]; then
+    helpme
+    
+fi
+
+
+if [ -f "$mdstat" ]; then
+
+    EXIT_STATUS="0"
+    EXIT_TEXT="OK - raid is active"
+
+    rebuild=`grep -B 2 -e "finish=" $mdstat`
+    if [ ! -z "$rebuild" ]; then
+
+        # dirty ... 
+        
+
+        EXIT_STATUS="2"
+        EXIT_TEXT="CRITICAL - raid rebuild"
+        PERF_DATA=" | $rebuild"
+    
+    fi
+    
+    
+
+
+fi
+
+PLUGIN_OUTPUT="MDSTAT $EXIT_TEXT $PERF_DATA"
+
+echo $PLUGIN_OUTPUT 
+exit $EXIT_STATUS

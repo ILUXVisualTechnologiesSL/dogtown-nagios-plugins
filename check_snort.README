@@ -1,0 +1,522 @@
+
+check_snort.sh -> plugins to check snort (alerts/hosts*)
+
+    check_snort is a nagios-plugin to check the functions of
+    a running snort-sensor* or events in snort_alert_databases 
+    against given thresholds
+    this plugin is designed to collect snort_statisticts and display
+    via pnp-graphs; i wouldn't count on the nagios-alerts, but
+    it's nice to check ypour 5min-alert-count or 24hrs-alert-count
+    with time-based correlation. 
+     
+    both checks are designed to run via nrpe.
+
+    
+    
+    *) not yet ready and to be done
+
+
+Installation:
+    download from monitoringexchange.org 
+        -> http://www.monitoringexchange.org/ 
+
+    
+    and put check_snort.sh into your $PLUGINS_REPOSITORY at your
+    snort_senors (for check_snort -m host) or your snort_alert_db_server
+    (for check_snort.sh -m alerts)
+    
+    edit check_snort.sh and change the variables as needed
+    
+    create $SPOOL_DATA_DIR with write_permissions for user nagios; this
+    directory will be used for check-data and logfiles 
+    
+    check out check_snort.cfg.template for nagios command/service-definitions 
+    and a pnp-template
+    
+    run test from nagios-host; you might turn on debugging_output (output 
+    appears in the logs @ $SPOOL_DATA_DIR)
+
+    enjoy your graphs ;-) 
+
+
+Plugin-Modi
+    the plugin works in two different modi:
+  
+  Alert-Modus  
+    check_snort.sh -m alerts checks the actual alerts againts an average 
+    alert_count; selection can be made with the -i switch
+
+    -i [INTERVAL] set check_interval (actual_alert vs avg_alert:
+                  1 -> 5min vs 60min
+                  2 -> 1hour vs 24hour [default]
+                  3 -> 24hour vs 7day
+                  4 -> 7 day vs 30 day (DO NOT USE)
+                  5 -> 7 day vs 90 day (DO NOT USE)
+                  6 -> display total number (no warning/critical) [nyr]
+    
+    furthermore you can choose a priority-level with the -p switch, given a range
+    from 1 (lowest prio, all alerts) to 4 (highest prio, only successfull-[user|admin] 
+    and successfull exploits); -p 3 is always a good start
+
+    -p [PRIORITY] set the snort_sig_priority_level to check against;
+                  default: 3
+    
+    
+  Host-Modus *
+    tbd ...
+    
+
+
+Running the plugin
+    depending on the amount of alerts it's wise to start just
+    with a few checks, maybe interval 2 for prio 2/3
+    (check_snort.sh -m alerts -i 2 -p 2 ), being checked
+    every five minutes)
+    alerting is best done with interval 1 or 2, but you'll need to adjust
+    the warning/critical threshold, since the default values and the values
+    in cfg.templates are taken from a webserver-environment.
+     
+    if you implement checks with -i > 2 you should run this checks
+    just once every hour or less frequent, since this interval 
+    is more for statistical reasons and not alerting, but might cause some
+    load on the database. 
+    
+    
+    
+    
+Output:
+    log_output is placed into $SPOOL_DATA_DIR (default) and might be verbose using
+    the -d switch 
+    the plugin returns, if check was able to execute OK/WARNING/CRITICAL, otherwise UNKNOWN
+    in good nagios-plugin-tradition; beside this some values are display:
+    the following live shows the output for: check_snort.sh -m alerts -p 1 -i 1 -w 1000 -c 10000
+    SNORT_CHECK OK - [alerts] p-1 :: 5min-1hr :: last: 151 - avg: 20 / thresh: 220/2020 [1000%/10000%]  
+    the output displays modus, prio, intervall last_alerts, avg_alerts and the threshold in values and 
+    percent. beside this, the plugin also returns actaual_alert_count, avg_alert_count, total_alert_count 
+    for the avg_interval; in this case, perfdata would be 5min=151;220;2020; 1hr=244; 1hr-avg=20.
+    for displaying the graphs via pnp there is a little pnp_template in check_snort.fg.template
+    check the plugin_homepage for examples 
+    
+    
+
+Usage: 
+
+
+check_snort.sh 
+            - nagios_plugin to snort_hosts or 
+              check snort_alerts in snort_databases
+              and alert on given thresholds; 
+              to be used @ snort_db_hosts via check_nrpe
+              see check_snort.README for more details
+              
+  [nyr]  ->  use with caution: function not yet ready implemented and tested 
+
+  USAGE:
+    check_snort.sh [options] 
+
+  CONFIG:
+    values for db_acces, defaults etc might be configured 
+    within this file -> /path/to/plugins/check_snort.sh
+    
+  OPTIONS
+    this script uses 2 modes: 
+    -m [modus]    set the working-modus
+                  MODI: 
+                    host   - check snort_host specific details (running, dropped packages)
+                             [nyr]
+                    alerts - check snort_alerts against a given database (only mysql supported
+                             at the moment 
+
+    -c [percent]  set critical_threshold; if actual_alert
+                  is [percent] higher then avg_alert returns CRITICAL 
+                  if the alertcount is [percent] lower, an
+                  anormal_report is generated and displayed
+                  default: 100
+                  
+    -w [percent]  set warning_threshold; if actual_alert
+                  is [percent] higher then avg_alert warning is displayed
+                  if the alertcount is [percent] lower, an
+                  anormal_report is generated and displayed
+                  default: 500
+                  
+    -i [INTERVAL] set check_interval (actual_alert vs avg_alert:
+                  1 -> 5min vs 60min
+                  2 -> 1hour vs 24hour [default]
+                  3 -> 24hour vs 7day
+                  4 -> 7 day vs 30 day (DO NOT USE)
+                  5 -> 7 day vs 90 day (DO NOT USE)
+                  6 -> display total number (no warning/critical) [nyr]
+                  
+    -p [PRIORITY] set the snort_sig_priority_level to check against;
+                  default: 3
+    
+    -s [sid]      set a special sid to check instead of priority
+                  [nyr]
+                  
+    
+    -d            debuG_output > logfile
+                  
+    -l [logfile]  alternate log_file
+                  default: SPOOL_DATA_DIR/check_snort.log
+                  
+    
+    -o [out_dir]  give a separate spool_data_dir 
+                  default: /var/log/nagios
+                  may be changed within the script itself via default_VAR
+    
+    -z            create cvs_output in SPOOL_DATA_DIR [nyr]
+  
+  
+  EXAMPLE
+   check_snort.sh -m alerts -i 3 -w 100 -c 200 
+
+
+check_snort.cfg.templates 
+
+
+#
+# nagios/pnp config_templates for check_snort.sh 
+#
+# 2009-10-20
+#
+# local-nrpe.cfg
+# dont_blame_nrpe=1
+command[check_snort_alerts]=/etc/nagios/plugins/check_snort.sh -m alerts -i $ARG1$ -p $ARG2$ -w $ARG3$ -c $ARG4$ 
+
+
+    
+
+# nagios_conf
+
+### command_definition w/ values ###################################
+define  command {
+    command_name    check_snort_alerts
+    command_line    $USER1$/check_nrpe -H $HOSTADDRESS$ -c check_snort_alerts -a $ARG2$
+    }   
+    
+
+
+##### prio 4 templates #####################################
+
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p4-1 5min
+        check_command           check_snort_alerts!1 4 1000 10000 
+        use                     generic-service
+        check_period            24x7
+        normal_check_interval   5
+        retry_check_interval    5
+        max_check_attempts      3
+        register                0
+
+}
+
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p4-2 1hr
+        check_command           check_snort_alerts!2 4 500 5000 
+        use                     generic-service
+        check_period            24x7
+        normal_check_interval   30
+        retry_check_interval    10
+        max_check_attempts      2
+        register                0
+
+}
+
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p4-3 24hr
+        check_command           check_snort_alerts!3 4 500 1000
+        use                     generic-service
+        check_period            24x7
+        normal_check_interval   60
+        retry_check_interval    10
+        max_check_attempts      2
+        register                0
+
+}
+
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p4-4 7d
+        check_command           check_snort_alerts!4 4 500 1000
+        use                     generic-service
+        check_period            24x7
+        normal_check_interval   720
+        retry_check_interval    10
+        max_check_attempts      2
+        register                0
+
+}
+
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p4-5 7d
+        check_command           check_snort_alerts!5 4 500 1000
+        use                     generic-service
+        check_period            24x7
+        normal_check_interval   720
+        retry_check_interval    10
+        max_check_attempts      2
+        register                0
+
+}
+
+
+##### prio 3 templates #####################################
+
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p3-1 5min
+        check_command           check_snort_alerts!1 3 1000 10000 
+        use                     generic-service
+        check_period            24x7
+        normal_check_interval   5
+        retry_check_interval    2
+        max_check_attempts      2
+        register                0
+
+}
+
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p3-2 1hr
+        check_command           check_snort_alerts!2 3 500 5000 
+        use                     generic-service
+        check_period            24x7
+        normal_check_interval   30
+        retry_check_interval    10
+        max_check_attempts      2
+        register                0
+
+}
+
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p3-3 24hr
+        check_command           check_snort_alerts!3 3 500 1000
+        use                     generic-service
+        check_period            24x7
+        normal_check_interval   60
+        retry_check_interval    10
+        max_check_attempts      2
+        register                0
+
+}
+
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p3-4 7d
+        check_command           check_snort_alerts!4 3 500 1000
+        use                     generic-service
+        check_period            24x7
+        normal_check_interval   720
+        retry_check_interval    10
+        max_check_attempts      2
+        register                0
+
+}
+
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p3-5 7d
+        check_command           check_snort_alerts!5 3 500 1000
+        use                     generic-service
+        check_period            24x7
+        normal_check_interval   720
+        retry_check_interval    10
+        max_check_attempts      2
+        register                0
+
+}
+
+
+##### prio 2 templates #####################################
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p2-1 5min
+        check_command           check_snort_alerts!1 2 1000 10000 
+        use                     generic-service
+        check_period            24x7
+        normal_check_interval   5
+        retry_check_interval    2
+        max_check_attempts      2
+        register                0
+
+}
+
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p2-2 1hr
+        check_command           check_snort_alerts!2 2 400 5000 
+        use                     generic-service
+        check_period            24x7
+        normal_check_interval   30
+        retry_check_interval    10
+        max_check_attempts      2
+        register                0
+
+}
+
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p2-3 24hr
+        check_command           check_snort_alerts!3 2 300 1000 
+        use                     generic-service
+        check_period            24x7
+        normal_check_interval   60
+        retry_check_interval    10
+        max_check_attempts      2
+        register                0
+
+}
+
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p2-4 7d
+        check_command           check_snort_alerts!4 2 500 1000
+        use                     generic-service
+        check_period            24x7
+        normal_check_interval   720
+        retry_check_interval    10
+        max_check_attempts      2
+        register                0
+
+}
+
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p2-5 7d
+        check_command           check_snort_alerts!5 2 500 1000
+        use                     generic-service
+        check_period            24x7
+        normal_check_interval   720
+        retry_check_interval    10
+        max_check_attempts      2
+        register                0
+
+}
+
+##### prio 1 templates #####################################
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p1-1 5min
+        check_command           check_snort_alerts!1 1 1000 10000 
+        use                     generic-service
+        check_period            24x7
+        normal_check_interval   5
+        retry_check_interval    2
+        max_check_attempts      2
+        register                0
+
+}
+
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p1-2 1hr
+        check_command           check_snort_alerts!2 1 400 5000 
+        use                     generic-service
+        check_period            24x7
+        normal_check_interval   30
+        retry_check_interval    5
+        max_check_attempts      2
+        register                0
+
+}
+
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p1-3 24hr
+        check_command           check_snort_alerts!3 1 300 1000 
+        use                     generic-service
+        check_period            24x7
+        normal_check_interval   60
+        retry_check_interval    10
+        max_check_attempts      3
+        register                0
+
+}
+
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p1-4 7d
+        check_command           check_snort_alerts!4 1 500 1000
+        use                     generic-service
+        normal_check_interval   720
+        retry_check_interval    10
+        max_check_attempts      3
+        register                0
+
+}
+
+define  service {
+        host_name               snort_db_host
+        service_description     snort_alerts p1-5 7d
+        check_command           check_snort_alerts!5 1 500 1000
+        use                     generic-service
+        normal_check_interval   720
+        retry_check_interval    10
+        max_check_attempts      3
+        register                0
+
+}
+
+
+
+# pnp_template => nagios3/htdocs/pnp/templates/check_snort.pnp
+<?php
+#
+# Copyright (c) 2006-2008 Joerg Linge (http://www.pnp4nagios.org)
+#
+# modified for check_snort_alerts / 
+#
+# 2009-09-30
+#
+#
+$opt[1] = "--title \"AVG_ALERTS / $servicedesc\" ";
+#
+$def[1] =  "DEF:var1=$rrdfile:$DS[1]:AVERAGE " ;
+$def[1] .=  "DEF:var2=$rrdfile:$DS[3]:AVERAGE " ;
+$def[1] .= "AREA:0 " ;
+$def[1] .= "AREA:var2#00FF00:\"Avg Alerts $NAME[2] \":STACK " ;
+$def[1] .= "LINE1:var2#000000 " ;
+$def[1] .= "LINE2:var1#FF0000:\"Last Alerts $NAME[1] \" " ;
+$def[1] .= "VDEF:var3=var1,MAXIMUM " ;
+$def[1] .= "LINE1:var3#F020F7:MAX " ;
+$def[1] .= "COMMENT:\"              \" " ;
+$def[1] .= "COMMENT:\"-----------------------------------------------\" " ;
+$def[1] .= "COMMENT:\"last alerts count-interval  $NAME[1]                 \" " ;
+$def[1] .= "COMMENT:\"avg  alerts count-interval  $NAME[3]                 \" " ;
+$def[1] .= "COMMENT:\"-----------------------------------------------            \" " ;
+$def[1] .= "GPRINT:var1:LAST:\"last alerts %6.0lf                \" ";
+$def[1] .= "COMMENT:\"                       \" " ;
+$def[1] .= "GPRINT:var2:LAST:\"avg-alerts  %6.0lf   \" ";
+$def[1] .= "COMMENT:\"                                 \" " ;
+$def[1] .= "GPRINT:var1:MAX:\"max-alerts  %6.0lf   \" ";
+$def[1] .= "COMMENT:\"                                 \" " ;
+$def[1] .= "COMMENT:\"-----------------------------------------------\" " ;
+$def[1] .= "COMMENT:\"limits -> w $WARN[1] | c $CRIT[1]                  \" " ;
+$def[1] .= "COMMENT:\"-----------------------------------------------            \" " ;
+$def[1] .= "COMMENT:\"host   -> $hostname     \" " ;
+#$def[1] .= "GPRINT:var1:AVERAGE:\"%3.4lg %s$UNIT[1] AVERAGE \" ";
+
+
+$opt[2] = "--title \"TOTAL_ALERTS / $servicedesc\" ";
+
+$def[2] =  "DEF:var1=$rrdfile:$DS[2]:AVERAGE " ;
+$def[2] .= "AREA:0 " ;
+$def[2] .= "AREA:var1#00FF00:\"total_count $NAME[3] - $servicedesc \":STACK " ;
+$def[2] .= "LINE1:var1#000000 " ;
+$def[2] .= "COMMENT:\"                 \" " ;
+$def[2] .= "COMMENT:\"-----------------------------------------------\" " ;
+$def[2] .= "COMMENT:\"total counts  $NAME[3]                 \" " ;
+$def[2] .= "COMMENT:\"-----------------------------------------------            \" " ;
+$def[2] .= "GPRINT:var1:LAST:\"$NAME[3] total_count %6.0lf    \" ";
+$def[2] .= "COMMENT:\"                                 \" " ;
+$def[2] .= "COMMENT:\"-----------------------------------------------            \" " ;
+$def[2] .= "COMMENT:\"host        $hostname     \" " ;
+
+
+?>
+

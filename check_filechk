@@ -1,0 +1,190 @@
+#!/bin/sh
+#
+# nagios_plugin to check for an (non)exiting file
+#
+# gpl'ed / (c) copyright 2009 mare-system.de
+# c: dogtown--[_at_]--mare-system--(dot)--de
+# v0.4.1 - 2011-05-13
+#
+# v0.4.x -> filesize/fileage-checks + perfdata
+# v0.2.x -> basic functions, perfdata
+#
+
+
+EXIT_STATUS="3"
+EXIT_TEXT="UNKNOWN"
+PERF_DATA="none"
+
+t_warn="0"
+t_crit="0"
+s_warn="0"
+s_crit="0"
+
+
+helpme() {
+
+    echo "
+
+This plugin tests, if a given file exists or
+not (switch -n)
+
+Usage: check_filechk [options] -f /path/to/file 
+
+OPTIONS
+    -n  OK if file does not exists (skip other checks)
+
+    -w  [time] time in seconds -> file older that -w
+    -c  [time] time in seconds -> file older that -c
+
+    -W  [kB]  size in kB -> file larger that -W
+    -C  [kB]  size in kB -> file larger that -C
+
+    you can either check for non_existance [n], 
+    file_age [w/c] or file_size [W/C]
+    
+
+    "
+
+
+}
+
+
+exit_nao() {
+    PLUGIN_OUTPUT="FILECHK $EXIT_TEXT | $PERF_DATA"
+    echo $PLUGIN_OUTPUT 
+    exit $EXIT_STATUS
+
+    
+}
+
+check="normal"
+
+while getopts f:w:c:W:C:nh opt
+do
+
+    case $opt in
+        f)
+        FILE=$OPTARG
+        ;;
+        n) 
+        negate="yes"
+        ;;
+        c) 
+        t_crit="$OPTARG"
+        check="time"
+        ;;
+        w) 
+        t_warn="$OPTARG"
+        check="time"
+        ;;
+        C) 
+        s_crit="$OPTARG"
+        check="size"
+        ;;
+        W) 
+        s_warn="$OPTARG"
+        check="size"
+        ;;
+        *)
+        helpme
+        exit
+        ;;
+    esac
+    
+done
+
+if [ ! "$1" ]; then
+
+    helpme
+    exit 3
+    
+
+fi
+
+
+if [ "$negate" = "yes" ]; then
+    if [ ! -f "$FILE" ]; then
+        EXIT_STATUS="0"
+        EXIT_TEXT="OK - file not found $FILE "
+        PERF_DATA="file_NOT_ok $FILE"
+    else
+        EXIT_STATUS="2"
+        EXIT_TEXT="CRITICAL - file found $FILE "
+        DU=`du -k $FILE | cut -f1`
+        PERF_DATA="filesize=$DU k"
+    
+    
+    fi
+    
+    exit_nao
+
+else
+    if [ -f "$FILE" ]; then
+        EXIT_STATUS="0"
+        EXIT_TEXT="OK - file found $FILE "
+        DU=`du -k $FILE  | cut -f1`
+        PERF_DATA="filesize=$DU k"
+    else
+        EXIT_STATUS="2"
+        EXIT_TEXT="CRITICAL - file NOT found $FILE "
+        PERF_DATA="file_NOT_ok $FILE"
+        exit_nao
+        
+    
+    fi
+
+
+fi
+
+if [ "$check" = "time" ]; then
+    nowtime=`date +%s`
+    ctime=`stat -c %Z $FILE`
+    t_diff=$((nowtime - ctime))
+    if [ $t_diff -gt $t_crit ]; then
+        EXIT_STATUS="2"
+        EXIT_TEXT="CRITICAL - file older than $t_crit seconds "
+        PERF_DATA="$PERF_DATA; age=$t_diff;$t_warn;$t_crit;"
+        
+    elif [ $t_diff -gt $t_warn ]; then
+        EXIT_STATUS="1"
+        EXIT_TEXT="WARNING - file older than $t_warn seconds "
+        PERF_DATA="$PERF_DATA; age=$t_diff;$t_warn;$t_crit;"
+    else
+        EXIT_STATUS="0"
+        EXIT_TEXT="OK - fileage within limits ($t_diff seconds) "
+        PERF_DATA="$PERF_DATA; age=$t_diff;$t_warn;$t_crit;"
+    
+    fi
+    
+    exit_nao
+        
+    
+
+fi
+
+
+if [ "$check" = "size" ]; then
+    f_size="$DU"
+    if [ $f_size -gt $s_crit ]; then
+        EXIT_STATUS="2"
+        EXIT_TEXT="CRITICAL - file_size bigger than $s_crit kB "
+        PERF_DATA="$PERF_DATA; size=$f_size;$s_warn;$s_crit;"
+        
+    elif [ $f_size -gt $s_warn ]; then
+        EXIT_STATUS="1"
+        EXIT_TEXT="WARNING - file_size bigger than $s_warn kB "
+        PERF_DATA="$PERF_DATA; size=$f_size;$s_warn;$s_crit;"
+    else
+        EXIT_STATUS="0"
+        EXIT_TEXT="OK - file_size within limits ($f_size kB) "
+        PERF_DATA="$PERF_DATA; size=$f_size;$s_warn;$s_crit;"
+    
+    fi
+    
+    exit_nao
+    
+
+fi
+
+
+exit_nao
