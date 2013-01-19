@@ -3,9 +3,30 @@
 # nagios_plugin to check for linux_based 
 # softraids -> mdstat/raid_rebuild_indicators
 #
-# gpl'ed / (c) copyright 2011 mare-system.de
+# (c) copyright 2011,2012,2013 mare-system.de
 # c: dogtown--[_at_]--mare-system--(dot)--de
-# v0.4.6 - 2012-05-13
+#
+# v0.4.8 - 2013-01-13
+#
+##############################################################################
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# 
+# for more info see License.txt
+#
+##############################################################################
 #
 
 
@@ -20,14 +41,26 @@ helpme() {
 
     echo "
 
-CHECK_MDSTAT.SH
+CHECK_MDSTAT
 
     This plugin tests, if a raid-system is going through a
-    rebuild-process
+    rebuild-process by checking /proc/mdstat, so no sudo-rights 
+    needed (usually)
+
+INSTALLATION:
+    copy this plugin to your local plugins-directory and create 
+    service/nrpe-definition
 
 USAGE:
+    
+    to run this plugin:
 
-    check_mdstat.sh 
+    /etc/nagios/plugins/check_mdstat
+    
+    optional:
+    check_mdstat -h   help
+    check_mdstat -v   version
+    
 
 REMARKS
     
@@ -79,7 +112,11 @@ if [ -f "$mdstat" ]; then
         PERF_DATA=" | $rebuild"
     
     fi
-    
+
+else
+
+        EXIT_STATUS="3"
+        EXIT_TEXT="Unknown - no $mdstat file found; do you have a linux-softraid?"
     
 
 

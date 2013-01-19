@@ -2,7 +2,7 @@
 #
 # check_psinfo - processinformations with perfdata
 #
-# part of nagdog
+# (c) copyright 2010,2011,2012,2013 dogtown@mare-system.de
 #
 # please note, some checks like users/net/cpu/iowait are linux-based
 # and *might* work on any *unix if you have the right programs installed
@@ -16,24 +16,44 @@
 #    - as of version 0.6 of this plugin, psutil 0.6.1 or greater
 #      is required
 #
-# (c) copyright 2010,2011,2012,2013 dogtown@mare-system.de
 #
-#   Licensed under the Apache License, Version 2.0 (the "License");
-#   you may not use this file except in compliance with the License.
-#   You may obtain a copy of the License at
+#NRPE_Config
 #
-#       http://www.apache.org/licenses/LICENSE-2.0
+#command[nrpe_check_ps_mem]=/etc/nagios/plugins/check_psinfo -t mem -w 90 -c 95
+#command[nrpe_check_ps_mem_proc]=/etc/nagios/plugins/check_psinfo -t mem -p "$ARG1$"
+#command[nrpe_check_ps_mem_proc_limit]=/etc/nagios/plugins/check_psinfo -t mem -p "$ARG1$" -w "$ARG2$" -c "$ARG3$"
+#command[nrpe_check_ps_procs]=sudo /etc/nagios/plugins/check_psinfo -t proc
+#command[nrpe_check_ps_proc_name]=sudo /etc/nagios/plugins/check_psinfo -t proc -p "$ARG1$"
+#command[nrpe_check_ps_net]=sudo /etc/nagios/plugins/check_psinfo -t net
+#command[nrpe_check_ps_net_lo]=sudo /etc/nagios/plugins/check_psinfo -t net -l "$ARG1$"
+#command[nrpe_check_ps_net_re]=sudo /etc/nagios/plugins/check_psinfo -t net -r "$ARG1$"
+#command[nrpe_check_ps_net_proc]=sudo /etc/nagios/plugins/check_psinfo -t net -p "$ARG1$"
+#command[nrpe_check_ps_iowait]=/etc/nagios/plugins/check_psinfo -t iowait -w 15 -c 40
+#command[nrpe_check_ps_iostat]=/etc/nagios/plugins/check_psinfo -t iostat -w 15 -c 40
+#command[nrpe_check_ps_users]=/etc/nagios/plugins/check_psinfo -t users -w 3 -c 5
+#command[nrpe_check_ps_uptime]=/etc/nagios/plugins/check_psinfo -t uptime
 #
-#   Unless required by applicable law or agreed to in writing, software
-#   distributed under the License is distributed on an "AS IS" BASIS,
-#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#   See the License for the specific language governing permissions and
-#   limitations under the License.
+# SERVICES_CONFIG
+# define  service {
+#         host_name               check_host
+#         service_description     psinfo_mem
+#         check_command           check_nrpe!nrpe_check_ps_mem
+#         use                     generic-service
+#         register                1
 #
+# }
+# define  service {
+#         host_name               check_host
+#         service_description     psinfo_net_3306
+#         check_command           check_nrpe!nrpe_check_ps_net_lo!3306
+#         use                     generic-service
+#         register                1
 #
-# v 0.4.10.r25 - AALPHAA - 2013-01-18
+# }
+
 #
 
+version = "0.4.10.r25 - AALPHAA - 2013-01-18"
 
 import psutil as ps
 import getopt, sys, time, os, string, socket
@@ -136,12 +156,19 @@ check_psinfo
                 -i ip  - check if given ip is found on that interface, 
                          CRITICAL if not                        [*]
                 ***
+    
+      -v        version
+      -h        help
 
     *** -> experimental option, not yet well tested or not fully
            implemented, DONT TRY THIS AT HOME!
     [*] -> optional value
-        
-    """
+
+    
+    Version:
+        %s
+    
+    """ % (version)
 
 
 def return_result():
@@ -798,7 +825,7 @@ def psinfo_mem():
     
 
 try:
-    opts, args = getopt.getopt(sys.argv[1:], "s:c:w:t:p:l:r:i:n:hdz", 
+    opts, args = getopt.getopt(sys.argv[1:], "s:c:w:t:p:l:r:i:n:hdzv", 
         ["help", "script", "debug" ])
 except getopt.GetoptError, err:
     # print help information and exit:
