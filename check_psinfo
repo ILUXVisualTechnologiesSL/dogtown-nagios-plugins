@@ -167,37 +167,45 @@ def psinfo_uptime():
     wd = 180    
     cd = 360
 
-    now_time = time.time()
-    boot_time = ps.BOOT_TIME
-    up_time = now_time - boot_time
-    up_days = int(up_time / 86400)
+    if wv != "no":
+        try:
+            wd = int(wv)
+        except:
+            print "-w must be integer"
+            sys.exit(3)
+        try:
+            cd = int(cv)
+        except:
+            print "-c must be integer"
+            sys.exit(3)
+
+    now_time    = time.time()
+    boot_time   = ps.BOOT_TIME
+    up_time     = now_time - boot_time
+    up_hours    = int(up_time / 3600)
+    up_days     = int(up_time / 86400)
 
     if up_days == 0:
-        up_txt = "< 24hrs (%s min up)" % (int(up_time/60))
+        up_txt = "< 24hrs (%s hrs)" % (up_hours)
     elif up_days == 1:
-        up_txt = "1 day"
+        up_txt = "1 day (%s hrs)" % up_hours
     else:
         up_txt = "%s days" % up_days
 
     if up_time  > (cd * 86400):
         return_status="CRITICAL"
         return_exit=2
-        return_text="%s" % (up_txt)
-        return_perfdata="uptime=%s days;" % up_days
-        return_result()
-
+    
     elif up_time  > (wd * 86400):
         return_status="WARNING"
         return_exit=1
-        return_text="%s" % (up_txt)
-        return_perfdata="uptime=%s days;" % up_days
-        return_result()
     else:
         return_status="OK"
         return_exit=0
-        return_text="%s" % (up_txt)
-        return_perfdata="uptime=%s days;" % up_days
-        return_result()
+
+    return_text="%s" % (up_txt)
+    return_perfdata="uptime=%s days;" % up_days
+    return_result()
 
 def psinfo_iface(iface):
     
@@ -593,7 +601,7 @@ def psinfo_users():
     
     c = 30
     w = 50
-    check_numbers = "yes"
+    check_numbers = "no"
     
     if wv != "no":
         check_numbers = "yes"
@@ -615,19 +623,19 @@ def psinfo_users():
         login_time = time.strftime("%Y-%d-%m.%H:%M", time.localtime(float(luser[3])))
         luser_list += "%s@%s[%s] " % (luser[0], luser[2], login_time)
 
-    
-    
-    if len(lusers) >= c:
-        return_status="CRITICAL"
-        return_exit=2
-    
-    elif len(lusers) >= w:
-        return_status="WARNING"
-        return_exit=1
 
-    else :
-        return_status="OK"
-        return_exit=1
+    return_status="OK"
+    return_exit=1
+    
+    if check_numbers == "yes":
+        if len(lusers) >= c:
+            return_status="CRITICAL"
+            return_exit=2
+        
+        elif len(lusers) >= w:
+            return_status="WARNING"
+            return_exit=1
+
     
 
     return_text="%s Users logged in" % len(lusers)
