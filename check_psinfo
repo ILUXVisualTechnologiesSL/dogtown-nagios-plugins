@@ -61,18 +61,23 @@ check_psinfo
       -t mem    check memory 
                 -w usage in %
                 -c usage in %s
-                eg -w 80 -c 90 
+                check_psinfo -t mem -w 80 -c 90 
                 
-                -p proc_name
-                -w usage in mb
-                -c usage in mb
-                eg -p apache2 -w 1024 -c 2048
+                -p proc_name   [*]
+                -w usage in mb [*]
+                -c usage in mb [*]
+                check_psinfo -t mem -p apache2 -w 1024 -c 2048
+                
+                you can use this to monitor / get perfdata without 
+                alerting, just skip -c / -w 
+                check_psinfo -t mem -p apache2 
+                
                  
 
       -t proc   check for processes
-                -w total nr of procs
-                -c total nr of procs
-                -p proc_name 
+                -w total nr of procs  [*]
+                -c total nr of procs  [*]
+                -p proc_name          [*]
                 eg -p apache -c 150 -w 300
                 returns CRITICAL if no processes are found 
                 
@@ -90,12 +95,11 @@ check_psinfo
                 
                 
       -t net    check net-connections
-                optional:
-                -w [nr] warn-nr of connections
-                -c [nr] crit-nr of connections
-                -l [nr] localport  (tcp) *** 
-                -r [nr] remoteport (tcp) *** 
-                -p [name] proc_name
+                -w [nr] warn-nr of connections    [*]
+                -c [nr] crit-nr of connections    [*]
+                -l [nr] localport  (tcp) ***      [*]
+                -r [nr] remoteport (tcp) ***      [*]
+                -p [name] proc_name               [*]
                 
                 if yout want to check for net_conns on servers like apache
                 you need to execute this script with sudo-rights. 
@@ -111,29 +115,31 @@ check_psinfo
                 -> checks for active netconns to remote port 5432                
       
       -t uptime checks the actual uptime
-                -w [days] -> warning_number of days uptime
-                -c [days] -> critical_number of days uptime
+                -w [days] -> warning_number of days uptime      [*]
+                -c [days] -> critical_number of days uptime     [*]
 
       -t users  checks for logged_in users (tested on linux)
-                -w [nr]   -> warning_number of user_logins
-                -c [nr]   -> critical_number of user_logins
+                -w [nr]   -> warning_number of user_logins      [*]
+                -c [nr]   -> critical_number of user_logins     [*]
 
       -t iowait check for current iowait - status
-                -w [nr] warn-% for iowait
-                -c [nr] crit-% for iowait
+                -w [nr] warn-% for iowait                       [*]
+                -c [nr] crit-% for iowait                       [*]
 
       -t iostat check for global iowait - status
-                -w [nr] warn-% for iowait
-                -c [nr] crit-% for iowait
+                -w [nr] warn-% for iowait                       [*]
+                -c [nr] crit-% for iowait                       [*]
       
       -t iface  check if network_interface [ if ] is up, CRITICAL if not
-                -n if  - give interface-name like eth0 / virbr0 etc, defaults to eth0
+                -n if  - give interface-name like eth0 / virbr0 etc, 
+                         defaults to eth0                       [*]
                 -i ip  - check if given ip is found on that interface, 
-                         CRITICAL if not
+                         CRITICAL if not                        [*]
                 ***
 
     *** -> experimental option, not yet well tested or not fully
            implemented, DONT TRY THIS AT HOME!
+    [*] -> optional value
         
     """
 
