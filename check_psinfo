@@ -10,12 +10,11 @@
 #
 # Requirements:
 #    - python 2.5 or later
-#    - python-psutil-0.2.0 or later (0.2.1 for -t uptime)
-#    - -t net -> netstat -altn
-#    - -t users -> users
-#    - -t iowait / -t iostat -> iostat
-#
-#
+#    - python-psutil-0.2.0 or later 
+#       - 0.2.1 for -t uptime
+#       - 0.6.1 for -t users
+#    - as of version 0.6 of this plugin, psutil 0.6.1 or greater
+#      is required
 #
 # (c) copyright 2010,2011,2012,2013 dogtown@mare-system.de
 #
@@ -108,7 +107,6 @@ check_psinfo
       -t users  checks for logged_in users (tested on linux)
                 -w [nr]   -> warning_number of user_logins
                 -c [nr]   -> critical_number of user_logins
-                ***
 
       -t iowait check for current iowait - status
                 -w [nr] warn-% for iowait
@@ -582,6 +580,61 @@ def psinfo_proc():
 
     return_result()
 
+
+def psinfo_users():
+    """
+    defaults: 
+        w: NIL
+        c: NIL
+        
+    """    
+    
+    global return_status, return_text, return_perfdata, return_exit
+    
+    c = 30
+    w = 50
+    check_numbers = "yes"
+    
+    if wv != "no":
+        check_numbers = "yes"
+        try:
+            w = int(wv)
+        except:
+            print "-w must be integer"
+            sys.exit(3)
+        try:
+            c = int(cv)
+        except:
+            print "-c must be integer"
+            sys.exit(3)
+    
+    lusers = ps.get_users()
+    luser_list = ""
+    
+    for luser in lusers:
+        login_time = time.strftime("%Y-%d-%m.%H:%M", time.localtime(float(luser[3])))
+        luser_list += "%s@%s[%s] " % (luser[0], luser[2], login_time)
+
+    
+    
+    if len(lusers) >= c:
+        return_status="CRITICAL"
+        return_exit=2
+    
+    elif len(lusers) >= w:
+        return_status="WARNING"
+        return_exit=1
+
+    else :
+        return_status="OK"
+        return_exit=1
+    
+
+    return_text="%s Users logged in" % len(lusers)
+    return_perfdata="users=%s;%s" % (len(lusers),luser_list)
+    
+    return_result()
+
 def psinfo_mem():
     """
     defaults: 
@@ -827,6 +880,9 @@ elif ctype == "iowait":
     psinfo_iowait()
     return_result()
 
+elif ctype == "users":
+    psinfo_users()
+    return_result()
 
 elif ctype == "iostat":
     psinfo_iostat()
