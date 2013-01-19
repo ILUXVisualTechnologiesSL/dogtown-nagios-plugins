@@ -90,6 +90,7 @@ check_psinfo
                 
                 
       -t net    check net-connections
+                optional:
                 -w [nr] warn-nr of connections
                 -c [nr] crit-nr of connections
                 -l [nr] localport  (tcp) *** 
@@ -98,11 +99,20 @@ check_psinfo
                 
                 if yout want to check for net_conns on servers like apache
                 you need to execute this script with sudo-rights. 
+                
+                examples:
+                check_psinfo -t net -l 3306 -c 200 -w 100 
+                -> checks for active netconns on local port 3306
+
+                check_psinfo -t net -p apache2 -c 300 -w 200 
+                -> checks for active netconns for a process with name apache2
+                
+                check_psinfo -t net -r 5432 -c 200 -w 100 
+                -> checks for active netconns to remote port 5432                
       
       -t uptime checks the actual uptime
                 -w [days] -> warning_number of days uptime
                 -c [days] -> critical_number of days uptime
-                ***
 
       -t users  checks for logged_in users (tested on linux)
                 -w [nr]   -> warning_number of user_logins
@@ -121,7 +131,7 @@ check_psinfo
                 -i ip  - check if given ip is found on that interface, 
                          CRITICAL if not
                 ***
-                
+
     *** -> experimental option, not yet well tested or not fully
            implemented, DONT TRY THIS AT HOME!
         
@@ -657,24 +667,20 @@ def psinfo_mem():
     c = 90
     
     if pv != "no":
+        w = ""
+        c = ""
+        check_vals = "yes"
         if wv == "no":
-            return_status="UNKNOWN"
-            return_exit=3
-            return_text="please use -w -c"
-            return_perfdata="none"
-            return_result()
-
-        try:
-            w = int(wv)
-        except:
-            print "-w must be integer"
-            sys.exit(3)
-    
-        try:
-            c = int(cv)
-        except:
-            print "-c must be integer"
-            sys.exit(3)
+            check_vals = "no"
+        else:
+            try:
+                w = int(wv)
+            except:
+                check_vals = "no"
+            try:
+                c = int(cv)
+            except:
+                check_vals = "no"
 
        
         xll = ps.get_pid_list()
@@ -702,27 +708,24 @@ def psinfo_mem():
             return_perfdata="procs=0;"
             return_result()
 
-        
-        if mem_c_mb >= c:
-            return_status="CRITICAL"
-            return_exit=2
-            return_text="Too much memory for process %s (%s MB)" % (pv, mem_c_mb)
-            return_perfdata="proc_mem=%s;%s;%s;" % (mem_c_mb, w, c)
-            return_result()
-        
-        elif mem_c_mb >= w:
-            return_status="WARNING"
-            return_exit=1
-            return_text="Too much memory for process %s (%s MB)" % (pv, mem_c_mb)
-            return_perfdata="proc_mem=%s;%s;%s;" % (mem_c_mb, w, c)
-            return_result()
-        
         return_status="OK"
         return_exit=0
         return_text="Memory within limits for process %s (%s MB)" % (pv, mem_c_mb)
         return_perfdata="proc_mem=%s;%s;%s;" % (mem_c_mb, w, c)
+
+
+        if check_vals == "yes":
+            if mem_c_mb >= c:
+                return_status="CRITICAL"
+                return_exit=2
+                return_text="Too much memory for process %s (%s MB)" % (pv, mem_c_mb)
+            
+            elif mem_c_mb >= w:
+                return_status="WARNING"
+                return_exit=1
+                return_text="Too much memory for process %s (%s MB)" % (pv, mem_c_mb)
+        
         return_result()
-                    
         
 
     
