@@ -32,14 +32,14 @@
 #   limitations under the License.
 #
 #
-# v 0.4.8.r25 - AALPHAA - 2013-01-18
+# v 0.4.10.r25 - AALPHAA - 2013-01-18
 #
 
 
 import psutil as ps
 import getopt, sys, time, os, string, socket
 import fcntl, struct
-
+import subprocess as sub
 
 ctype = "none"
 return_status="UNKNOWN"
@@ -212,6 +212,16 @@ def psinfo_iface(iface):
     try:
         res = fcntl.ioctl(sockfd, SIOCGIFADDR, ifreq)
     except:
+        # interface fails 
+        # now check, if iface is there anyway using ifconfig
+        res_found = 0
+        i = sub.Popen("/sbin/ifconfig", shell=True, stdout=sub.PIPE).stdout.readlines() 
+        for res in i:
+            if res.find(iface) > -1:
+                return_status="WARNING"
+                return_exit=1
+                return_text="IFace %s is Available / No IP given :: %s" % (iface, res.replace("  ", " "))
+                return_result()
         return_status="CRITICAL"
         return_exit=2
         return_text="IFace %s is DOWN / No IP given" % (iface)
@@ -822,7 +832,7 @@ elif ctype == "iostat":
     psinfo_iostat()
     return_result()
 
-elif ctype == "if":
+elif ctype == "iface":
     psinfo_iface(ifd)
     return_result()
 
