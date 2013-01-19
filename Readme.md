@@ -12,10 +12,17 @@ execute $check_plugin -h
 
 # Installation
 
-- download plugins
+- download / extract the repo
+ - [https://bitbucket.org/maresystem/linux-docu|Bitbucket https://bitbucket.org/maresystem/linux-docu]
+ - [https://bitbucket.org/maresystem/dogtown-nagios-plugins/get/master.tar.gz| download tar.gz]
+ - [https://bitbucket.org/maresystem/dogtown-nagios-plugins/get/master.zip| download zip]
 
 ~~~
     git clone https://bitbucket.org/maresystem/linux-docu.git
+    
+    wget -O dogtown-nagios-plugins.tar.gz https://bitbucket.org/maresystem/dogtown-nagios-plugins/get/master.tar.gz
+    
+    
 ~~~
 
 - copy plugins to your local nagios-plugins-dir
