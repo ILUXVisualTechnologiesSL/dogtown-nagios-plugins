@@ -1,27 +1,10 @@
 #!/usr/bin/python
 #
-##############################################################################
-#
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
-#
-##############################################################################
 #
 # requirements: 
 #     - python 2.5 or above, must be able to use threads
 #     - nmap 5.0 or above 
-#     - sudo 
+#     - unprivilegded user with sudo-rights for chgroup 
 #
 # todo: 
 #   - modus:nagios/standalon
@@ -53,19 +36,20 @@
 
 import time, socket, thread, sys, os, getopt, string
 
-version = "0.2.1 - 2010-04-22"
+version = "0.4.32 - 2013-01-19"
 
 #
-# config
+# config_start
 #
+
 debug = "no"
 
 data_dir = "/var/lib/check_nmap"
-nmap_exec = "/usr/local/bin/nmap"
-ndiff_exec = "/usr/local/bin/ndiff"
-nmap_switches = "-PN -T5" # maybe tweak this for better performance 
-
-nagios_version = "3"
+nmap_exec = "/usr/bin/nmap"
+ndiff_exec = "/usr/bin/ndiff"
+nmap_switches = "-PN -T5 -sV --version-all" # maybe tweak this for better performance 
+nmap_ports = "-p U:1- T:1-"
+nagios_version = 3
 nagios_group = "nagios" # for chmodding/chowning scan-files
 
 # use this for later reasons
@@ -75,13 +59,14 @@ profiles = {
         'standard':'Basic scan of localhost',
            }
 
-           
+
+
 # after which time an unaltered nmap_asctual.scan - file 
 # will create an alert (cron stopped, broken nmap etc)
 
 # defaults 
-scan_fresh_warning  = "70"
-scan_fresh_critical = "120"
+scan_fresh_warning  = 1440
+scan_fresh_critical = 2880
 
 # this is needed for standalone-modus
 default_email = "root@localhost"
@@ -93,25 +78,32 @@ smtp_user = ""
 smtp_pass = ""
 smtp_ssl = "no" # if yes -> port = 995
 
+#
+# config_end
+#
+
 
 def check_nmap_help():
     
     print """
 
 check_nmap  - version: %s
-Copyright 2009,2010 mare-system / dogtown@mare-system.de    
+Copyright 2009,2010,2011,2012,2013 mare-system / dogtown@mare-system.de    
 
 This plugin tests for nmap-diffs on a given server-list;
        it runs in three different modi:
         -i [profile-name] 
-            -> create initial scan_result
+            create initial scan; interactively if no server.lst is
+            found
+            
         -s [profile-name] 
-            -> create actual scan_result (should be run from 
-               crontab, eg every hour, depending on your network
-               and level of paranoia)
+            create actual scan_result (should be run from an unprivilegded
+            users crontab, eg every hour, depending on your network
+            and level of paranoia)
+
         -x [profile-name]
-            -> execute scan/ ndiff: check actual_scan_result against 
-               initial_scan_result should be executed as nagios-check
+            execute scan/ ndiff: check actual_scan_result against 
+            initial_scan_result should be executed as nagios-check
 
 Please note: this is still in testing (late alpha/early beta) and should
 be wisely tested before executed against a larger network
@@ -133,14 +125,23 @@ OPTIONS
                           against initial_scan_result 
                           should be executed as nagios-check
 
-  values: 
+  Options: 
+    -P                 -> use nmap-ping-scan (should be used when
+                          scanning a list of networks, e.g. 192.168.100.0/24,
+                          because othervise -PN is used for nmap, assuming you know
+                          the servers are up and running, pbut pings might get blocked
+
+    -p [ports]         -> give nmap-style portrange e.g. 
+                          -p22; -p1-65535; -p U:53,111,137,T:21-25,80,139,8080
+
+    
     -w minutes         -> time in minutes after which an unaltered 
                           nmap_asctual.scan file will return warning
-                          default: 80 *** (only with -x)
+                          default: 1440 *** (only with -x)
                           
     -c minutes         -> time in minutes after which an unaltered 
                           nmap_current.scan file will return critical
-                          default: 120 *** (only with -x)
+                          default: 2880 *** (only with -x)
                           
     -v nagios-version  -> might be 2 (limited output)
                           default: 3 (only with -x)
@@ -153,7 +154,9 @@ OPTIONS
 INSTALL:
 
   - edit this script and change values from # config - section
-  - create data_dir 
+  - create data_dir, give your nagios-user read and the nmap-user
+    rw - access to that directory; you should execute your nmap-scans
+    as an unprivileged user via crontab, NOT via nagios/nrpe, due to timeouts
   - define your networks/hostlist to scan
   - create a check (see below)
 
@@ -198,6 +201,11 @@ def return_nagios():
     sys.exit(return_code)
 
 
+def print_debug(in_put):
+    
+    if debug == "yes":
+        print "d: %s" % in_put
+
 
 def scan_log(out_text, scan_log_file):
     actual_time=time.strftime("%F %H:%M", time.localtime(time.time()))
@@ -218,7 +226,7 @@ def nmap_scan(profile):
     
     if not os.path.isdir(scan_data_dir):
         print "ERROR!! no scan_data_dir found -> %s \n > does it exists???\n > ... exiting ..." % scan_data_dir
-        sys.exit()
+        sys.exit(2)
     if os.access("%s" % nmap_exec, os.X_OK) == False:
         print """
         
@@ -233,7 +241,7 @@ ERROR ... nmap_executable not found / not executable
             print "ERROR!! no server_file found -> %s \n > does it exists???\n > ... exiting ..." % server_file
             sys.exit()
 
-    nmap_command = "%s %s -oX %s %s %s " % (nmap_exec, nmap_switches, scan_current_file, nmap_list_switch, server_file)
+    nmap_command = "%s %s %s -oX %s %s %s " % (nmap_exec, nmap_switches, nmap_ports, scan_current_file, nmap_list_switch, server_file)
     try:
         os.system(nmap_command)
         #os.popen(nmap_command).readlines() 
@@ -247,8 +255,8 @@ ERROR while trying to execute scan
         """ % nmap_command
         sys.exit(2)
     try:
-        os.system("chgrp %s %s " % (nagios_group, scan_current_file))
-        os.system("chmod 440 %s " % scan_current_file)
+        os.system("sudo chgrp %s %s " % (nagios_group, scan_current_file))
+        os.system("sudo chmod 640 %s " % scan_current_file)
     except:
         print "cannot chgroup/chmod %s for nagios-access" % scan_current_file
 
@@ -259,12 +267,15 @@ def nmap_init(profile):
     global profile_name
     profile_name = profile
     
+    
+    run_time = time.strftime("%Y-%m-%d_%H:%M", time.localtime(time.time()))
+    
     if not os.path.isdir(scan_data_dir):
         try:
             os.makedirs(scan_data_dir)
         except:
-            print "ERROR!! cannot create scan_data_dir  -> %s \n > are you r00t???\n > ... exiting ..." % scan_data_dir
-            sys.exit()
+            print "ERROR!! cannot create scan_data_dir  -> %s \n > do you have rw_rights to %s ???\n > ... exiting ..." % data_dir
+            sys.exit(2)
     
     if os.access("%s" % nmap_exec, os.X_OK) == False:
         print """
@@ -276,25 +287,56 @@ ERROR ... nmap_executable not found / not executable
         """ % nmap_exec
         sys.exit(2)
 
-    if list == "yes":
-        if not os.path.isfile(server_file):
-            print "ERROR!! no server_file found -> %s \n > does it exists???\n > ... exiting ..." % server_file
-            sys.exit()
 
+    if not os.path.isfile(server_file):
+        print "[i] no server_file found -> %s \n > ... creating ..." % server_file
 
+        servers = []
+        s_in = ""
+        print "> [q] to quit and write file %s " % server_file
+        while s_in != "q":
+            s_in = raw_input("> add server/net to server.lst: ")
+            if s_in == "q":
+                break
+            if len(s_in) < 5:
+                print "> [q] to quit and write file %s " % server_file
+                continue
+            else:
+                servers.append(s_in.strip())
+        
+        print "\n\n------------------------------\n> going to add now: \n"
+        for s in servers:
+            print "   - %s" % s
+        
+        write_file = raw_input("> write server.lst [Y|n] ")
+        if write_file != "n":
+            scan_log("creating server.lst -> %s" % server_file) 
+            f = open(server_file, "w")
+            for s in servers:
+                scan_log("  - added %s" % s) 
+                f.write("%-s \n" % s)
+            
+            f.write("\n\n# end \n")
+            f.close()
+            print "> file written ->  %s " % server_file
+            
+            
+        
+            
+        
     if os.path.isfile(scan_init_file):
         print "deleting old init-file"
         try:
-            os.system("chattr -i %s " % scan_init_file)
             os.system("chmod 600 %s " % scan_init_file)
             os.system("rm -f %s " % scan_init_file)
         except:
-            print "chattr doesnt work??? just doing a chmod 600 on -> %s " % scan_init_file
             os.system("chmod 600 %s " % scan_init_file)
             os.system("rm -f %s " % scan_init_file)
     
 
-    nmap_command = "%s %s -oX %s %s %s " % (nmap_exec, nmap_switches, scan_init_file, nmap_list_switch, server_file)
+    nmap_command = "%s %s %s -oX %s %s %s " % (nmap_exec, nmap_switches, nmap_ports, scan_init_file, nmap_list_switch, server_file)
+    print_debug(nmap_command)
+    
     try:
         os.system(nmap_command)
         #os.popen(nmap_command).readlines() 
@@ -309,14 +351,10 @@ ERROR while trying to execute scan
         sys.exit(2)
     
     scan_log("[%s] :: INIT nmap run -> %s " % (profile, nmap_command), scan_log_file)
-    try:
-        os.system("chgrp %s %s " % (nagios_group, scan_init_file))
-        os.system("chmod 440 %s " % scan_init_file)
-        os.system("chattr +i %s " % scan_init_file)
-    except:
-        print "chattr doesnt work??? just doing a chmod 400 on -> %s " % scan_init_file
-        os.system("chgrp %s %s " % (nagios_group, scan_init_file))
-        os.system("chmod 440 %s " % scan_init_file)
+    os.system("sudo chgrp %s %s " % (nagios_group, scan_init_file))
+    os.system("sudo chmod 440 %s " % scan_init_file)
+    os.system("sudo chgrp %s %s " % (nagios_group, scan_data_dir))
+    os.system("sudo chmod 750 %s " % scan_data_dir)
     
     sys.exit()
 
@@ -375,7 +413,7 @@ def nmap_check(profile):
         return_status = "CRITICAL"
         return_code = 2
         out_len = len(ndiff_out)
-        print out_len
+        #print out_len
         line_count = 0
         for line in ndiff_out:
             if line.find("open") > -1:
@@ -394,7 +432,7 @@ if len(sys.argv) < 2:
     sys.exit(2) 
 
 try:
-    opts, args = getopt.getopt(sys.argv[1:], "i:x:n:s:c:w:v:dh" )
+    opts, args = getopt.getopt(sys.argv[1:], "i:x:n:s:c:w:v:p:dhP" )
 except getopt.GetoptError, err:
     # print help information and exit:
     print str(err) # will print something like "option -a not recognized"
@@ -403,6 +441,7 @@ except getopt.GetoptError, err:
 
 do = "buttin"
 list = "yes"
+ping_scan = "no"
 
 for o, a in opts:
     #print "o :: " + o + "   <-->  a: " + a
@@ -411,6 +450,7 @@ for o, a in opts:
 
     elif o == "-d":
         debug = "yes"    
+        nmap_switches = nmap_switches + " --version-trace  --reason "
 
     
     elif o == "-h":
@@ -424,6 +464,14 @@ for o, a in opts:
     elif o == "-s":
         profile = a
         do = "scan"
+
+    elif o == "-P":
+        ping_scan = "yes"
+        nmap_switches = nmap_switches.replace("-PN", " ")
+        
+    elif o == "-p":
+        nmap_ports = "%s" % a
+
 
     elif o == "-x":
         profile = a
