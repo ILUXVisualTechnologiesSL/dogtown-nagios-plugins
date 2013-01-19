@@ -220,11 +220,11 @@ def psinfo_iface(iface):
             if res.find(iface) > -1:
                 return_status="WARNING"
                 return_exit=1
-                return_text="IFace %s is Available / No IP given :: %s" % (iface, res.replace("  ", " "))
+                return_text="IFace %s is Available / No IP :: %s" % (iface, res.replace("  ", " "))
                 return_result()
         return_status="CRITICAL"
         return_exit=2
-        return_text="IFace %s is DOWN / No IP given" % (iface)
+        return_text="IFace %s is DOWN " % (iface)
         return_result()
 
     xip = struct.unpack('16sH2x4s8x', res)[2]
