@@ -213,6 +213,9 @@ check_psinfo
                          CRITICAL if not                        [*]
                 ***
     
+    MISC Options
+      -R        suppress run_time informations
+      
       -v        version
       -h        help
  """
@@ -228,13 +231,18 @@ def return_result():
     r2 = run_time[1][0:2]
     run_time = "%s.%s" % (r1, r2)
     if return_perfdata == "none":
-        perfdata = "run_time=%sms;" % run_time
-    else:
-        if return_perfdata[-1] != ";":
-            perfdata = "%s; run_time=%sms;" % (return_perfdata, run_time)
+        if rtime == "no":
+            perfdata = ""
         else:
-            perfdata = "%s run_time=%sms" % (return_perfdata, run_time)
-    print "PSInfo.%s %s %s | %s " % (ctype.upper(), return_status, return_text, perfdata)
+            perfdata = "| run_time=%sms;" % run_time
+    else:
+        perfdata = " | %s " % return_perfdata
+        if rtime ==  "yes":
+            if return_perfdata[-1] != ";":
+                perfdata = "| %s; run_time=%sms;" % (return_perfdata, run_time)
+            else:
+                perfdata = "| %s run_time=%sms" % (return_perfdata, run_time)
+    print "PSInfo.%s %s %s %s " % (ctype.upper(), return_status, return_text, perfdata)
     sys.exit(return_exit)
 
 
@@ -972,18 +980,6 @@ def psinfo_mem():
     
     
     
-    
-
-try:
-    opts, args = getopt.getopt(sys.argv[1:], "s:c:w:t:p:l:r:i:n:e:hdzv", 
-        ["help", "script", "debug" ])
-except getopt.GetoptError, err:
-    # print help information and exit:
-    print str(err) # will print something like "option -a not recognized"
-    psinfo_help()
-    sys.exit(2)
-
-
 wv      = "no"
 cv      = "no"
 pv      = "no"
@@ -993,6 +989,18 @@ ip      = "no"
 ifd     = "eth0"
 nio     = "all"
 iface   = "all"
+rtime   = "yes"    
+
+try:
+    opts, args = getopt.getopt(sys.argv[1:], "s:c:w:t:p:l:r:i:n:e:hdzvR", 
+        ["help", "script", "debug" ])
+except getopt.GetoptError, err:
+    # print help information and exit:
+    print str(err) # will print something like "option -a not recognized"
+    psinfo_help()
+    sys.exit(2)
+
+
 
 for o, a in opts:
     #print "o :: " + o + "   <-->  a: " + a
@@ -1039,6 +1047,8 @@ for o, a in opts:
             print "value for -r  must be integer"
             sys.exit(3)
             
+    elif o == "-R":
+        rtime = "no" 
 
     
     else:
