@@ -3,11 +3,11 @@
 #
 # requirements: 
 #     - python 2.5 or above, must be able to use threads
-#     - nmap 5.0 or above 
+#     - nmap 5.0 or above  including ndiff
 #     - unprivilegded user with sudo-rights for chgroup 
 #
 # todo: 
-#   - modus:nagios/standalon
+#   - modus:nagios/standalone
 #   - profile: mailto= 
 #
 # commands-examples:
@@ -31,12 +31,12 @@
 
 # cronjob
 # checks all 10 minutes for profil-name 
-# */10 * * * * /etc/nagios/plugins/check_nmap -c profil-name
+# */10 * * * * /etc/nagios/plugins/check_nmap -s profil-name
 
 
 import time, socket, thread, sys, os, getopt, string
 
-version = "0.4.32 - 2013-01-19"
+version = "0.4.34 - 2013-01-19"
 
 #
 # config_start
@@ -47,8 +47,8 @@ debug = "no"
 data_dir = "/var/lib/check_nmap"
 nmap_exec = "/usr/bin/nmap"
 ndiff_exec = "/usr/bin/ndiff"
-nmap_switches = "-PN -T5 -sV --version-all" # maybe tweak this for better performance 
-nmap_ports = "-p U:1- T:1-"
+nmap_switches = "-PN -T5 -sV " # maybe tweak this for better performance 
+nmap_ports = "-p U:1-,T:1-"
 nagios_version = 3
 nagios_group = "nagios" # for chmodding/chowning scan-files
 
@@ -90,7 +90,8 @@ def check_nmap_help():
 check_nmap  - version: %s
 Copyright 2009,2010,2011,2012,2013 mare-system / dogtown@mare-system.de    
 
-This plugin tests for nmap-diffs on a given server-list;
+This plugin tests for nmap-diffs on a given server-list
+
        it runs in three different modi:
         -i [profile-name] 
             create initial scan; interactively if no server.lst is
@@ -100,12 +101,17 @@ This plugin tests for nmap-diffs on a given server-list;
             create actual scan_result (should be run from an unprivilegded
             users crontab, eg every hour, depending on your network
             and level of paranoia)
+            
 
         -x [profile-name]
             execute scan/ ndiff: check actual_scan_result against 
             initial_scan_result should be executed as nagios-check
 
-Please note: this is still in testing (late alpha/early beta) and should
+Please note: the modes -i / -s might take a long time if using default-values
+    due to the fact that the full portrange is used (-p U:1-,T:1-)
+    
+
+this is still in testing (late alpha/early beta) and should
 be wisely tested before executed against a larger network
 
 ***) => still to be done
@@ -126,13 +132,17 @@ OPTIONS
                           should be executed as nagios-check
 
   Options: 
-    -P                 -> use nmap-ping-scan (should be used when
+    -P                 -> skip nmap-ping-scan (should NOT be used when
                           scanning a list of networks, e.g. 192.168.100.0/24,
                           because othervise -PN is used for nmap, assuming you know
-                          the servers are up and running, pbut pings might get blocked
+                          the servers are up and running, but pings might get blocked
+                          default: -PN is OFF
 
     -p [ports]         -> give nmap-style portrange e.g. 
                           -p22; -p1-65535; -p U:53,111,137,T:21-25,80,139,8080
+                          -p fast       -> -F FastMode
+                          -p top        -> --top-ports 1000
+                          -p default    -> default-scan, turns of -p
 
     
     -w minutes         -> time in minutes after which an unaltered 
@@ -161,7 +171,14 @@ INSTALL:
   - create a check (see below)
 
 
-Create a check (steps are MANDATORY)
+Create a check
+  
+  interactively:
+    - run check_nmap -i [profile-name]; data-directories and server.lst
+      will be created within data_dir
+    
+  manually:
+
     - create [data_dir]/profile-name (see value for data_dir below)
       in section DATA
     - create a file called servers.lst in [data_dir]/profile-name
@@ -169,12 +186,14 @@ Create a check (steps are MANDATORY)
     - (not needed at the moment):
       edit value profiles => add new profile-name/description to dictionary
     - run check_nmap -i [profile-name]
+
+  always:
     - add cronjob for check_nmap -x [profile-name]
-    - add service-check for check_nmap -c [profile-name]
+    - add service-check for check_nmap -x [profile-name]
     - run forest, run
     
 
-DATA:
+DATA_DIR:
   default -> %s
   
   you might change the value for [data_dir] within the header 
@@ -261,7 +280,7 @@ ERROR while trying to execute scan
         print "cannot chgroup/chmod %s for nagios-access" % scan_current_file
 
     scan_log("[%s] :: SCAN  nmap run -> %s " % (profile, nmap_command), scan_log_file)
-    sys.exit()
+
 
 def nmap_init(profile):
     global profile_name
@@ -402,24 +421,37 @@ def nmap_check(profile):
         return_code = 3
         return_nagios()
     
+    ndc = 0
+    for line in ndiff_out:
+        if line.find("Nmap") > -1:
+            continue
+        elif line.find("Not shown") > -1:
+            continue
+        elif line.find("open") > -1:
+            ndc += 1
+            return_output = "%s -> %s" % (return_output, line.strip())
+            continue
+        elif line.find("closed") > -1:
+            ndc += 1
+            return_output = "%s -> %s" % (return_output, line.strip())
+            continue
+        elif line.find("filtered") > -1:
+            ndc += 1
+            return_output = "%s -> %s" % (return_output, line.strip())
+            continue
+                    
     
-    if len(ndiff_out) < 3:
+    if ndc < 1:
         return_status = "OK"
         return_output = "nmap-check passed -> profile: %s " % (profile)
         return_code = 0
         return_nagios()
     else:
-        return_output = "DIFF found: "
+        return_output = "DIFF found: %s" % return_output
         return_status = "CRITICAL"
         return_code = 2
         out_len = len(ndiff_out)
         #print out_len
-        line_count = 0
-        for line in ndiff_out:
-            if line.find("open") > -1:
-                return_output = "%s -> %s" % (return_output, string.strip(line))
-            elif line.find("filtered") > -1:
-                return_output = "%s -> %s" % (return_output, string.strip(line))
             
         if nagios_version == "3":
             return_output = "%s \n%s" % (return_output, string.join(ndiff_out, ""))         
@@ -450,7 +482,7 @@ for o, a in opts:
 
     elif o == "-d":
         debug = "yes"    
-        nmap_switches = nmap_switches + " --version-trace  --reason "
+        nmap_switches = nmap_switches + " --version-trace"
 
     
     elif o == "-h":
@@ -466,11 +498,18 @@ for o, a in opts:
         do = "scan"
 
     elif o == "-P":
-        ping_scan = "yes"
-        nmap_switches = nmap_switches.replace("-PN", " ")
+        ping_scan = "no"
+        nmap_switches = nmap_switches + " -PN "
         
     elif o == "-p":
-        nmap_ports = "%s" % a
+        if a == "fast":
+            nmap_ports = " -F "
+        elif a == "top":
+            nmap_ports = " --top-ports 1000 "
+        elif a == "default":
+            nmap_ports = " "
+        else:
+            nmap_ports = " -p %s " % a
 
 
     elif o == "-x":
@@ -509,14 +548,17 @@ if list == "no":
 
 if do == "buttin":
     pass
+
 elif do == "scan":
     nmap_scan(profile)
-
-elif do == "check":
-    nmap_check(profile)
+    sys.exit()
 
 elif do == "init":
     nmap_init(profile)
+    sys.exit()
+
+elif do == "check":
+    nmap_check(profile)
     
 
 return_status = "UNKNOWN"
