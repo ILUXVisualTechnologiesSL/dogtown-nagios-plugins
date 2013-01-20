@@ -36,6 +36,11 @@
 #command[nrpe_check_ps_iostat]=/etc/nagios/plugins/check_psinfo -t iostat -w 15 -c 40
 #command[nrpe_check_ps_users]=/etc/nagios/plugins/check_psinfo -t users -w 3 -c 5
 #command[nrpe_check_ps_uptime]=/etc/nagios/plugins/check_psinfo -t uptime
+#command[nrpe_check_ps_uptime_limits]=/etc/nagios/plugins/check_psinfo -t uptime -w "$ARG1" -c "$ARG2" 
+#command[nrpe_check_ps_nio_all]=/etc/nagios/plugins/check_psinfo -t nio
+#command[nrpe_check_ps_nio_if]=/etc/nagios/plugins/check_psinfo -t nio -n "$ARG1$"
+#command[nrpe_check_ps_nio_if_val]=/etc/nagios/plugins/check_psinfo -t nio -n "$ARG1$" -e "$ARG2"
+#command[nrpe_check_ps_nio_if_val_limits]=/etc/nagios/plugins/check_psinfo -t nio -n "$ARG1$" -e "$ARG2" -w "$ARG3" -c "$ARG4" 
 #
 # SERVICES_CONFIG
 # define  service {
@@ -93,9 +98,9 @@ check_psinfo
                 -c usage in %
                 check_psinfo -t mem -w 80 -c 90 
                 
-                -p proc_name   [*]
-                -w usage in mb [*]
-                -c usage in mb [*]
+                -p proc_name                                    [*]
+                -w usage in mb                                  [*]
+                -c usage in mb                                  [*]
                 check_psinfo -t mem -p apache2 -w 1024 -c 2048
                 
                 you can use this to monitor / get perfdata without 
@@ -103,9 +108,9 @@ check_psinfo
                 check_psinfo -t mem -p apache2 
 
       -t proc   check for processes
-                -w total nr of procs  [*]
-                -c total nr of procs  [*]
-                -p proc_name          [*]
+                -w total nr of procs                            [*]
+                -c total nr of procs                            [*]
+                -p proc_name                                    [*]
                 eg -p apache -c 150 -w 300
                 returns CRITICAL if no processes are found 
                 
@@ -145,7 +150,7 @@ check_psinfo
 
       -t nio    check for certain network-io-stats; if no -e is given, 
                 all stats will be returned, but -w/-c might not be used
-                -n if   give interface-name like ethp/lo etc;    [*]
+                -n if   give interface-name like eth0/lo etc;   [*]
                         default: stats ffor all interfaces
                 -e val  check for error-val and might be:       [*]
                         - bsent   / number of bytes sent
@@ -160,6 +165,17 @@ check_psinfo
                                     were dropped (always 0 on OSX and BSD)
                 -w [nr] warn-nr of errors                       [*]
                 -c [nr] crit-nr of errors                       [*]
+                
+                examples:
+                
+                check_psinfo -t nio -n eth0 
+                -> checks for interface-stats @ eth0, used to collect
+                perf_data
+                
+                check_psinfo -t nio -n eth0 -e errin -w 10 -c 1000
+                -> checks for incoming error-stats @ eth0 and alerts
+                on given values
+                
                 ***
 
       
@@ -207,14 +223,17 @@ check_psinfo
 
 def return_result():
     end_time = time.time()
-    run_time = str(end_time - start_time )[0:8]
+    run_time = str((end_time - start_time) * 1000 ).split(".")
+    r1 = run_time[0]
+    r2 = run_time[1][0:2]
+    run_time = "%s.%s" % (r1, r2)
     if return_perfdata == "none":
-        perfdata = "run_time=%s;" % run_time
+        perfdata = "run_time=%sms;" % run_time
     else:
         if return_perfdata[-1] != ";":
-            perfdata = "%s; run_time=%s;" % (return_perfdata, run_time)
+            perfdata = "%s; run_time=%sms;" % (return_perfdata, run_time)
         else:
-            perfdata = "%s run_time=%s" % (return_perfdata, run_time)
+            perfdata = "%s run_time=%sms" % (return_perfdata, run_time)
     print "PSInfo.%s %s %s | %s " % (ctype.upper(), return_status, return_text, perfdata)
     sys.exit(return_exit)
 
@@ -320,7 +339,7 @@ def psinfo_iface(iface):
     if ip == "no":
         return_status="OK"
         return_exit=0
-        return_text="IFace %s is UP" % (iface)
+        return_text="IFace %s is UP [ %s ]" % (iface, sip)
         return_result()        
 
     if sip == ip:
