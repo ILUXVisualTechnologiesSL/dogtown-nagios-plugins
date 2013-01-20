@@ -11,10 +11,14 @@
 # Requirements:
 #    - python 2.5 or later
 #    - python-psutil-0.2.0 or later 
-#       - 0.2.1 for -t uptime
-#       - 0.6.1 for -t users
-#    - as of version 0.6 of this plugin, psutil 0.6.1 or greater
-#      is required
+#       - 0.6.1 for any function
+#       - 0.2.1 if you can skip -t mem / -t users
+#    - please note, as of v 0.6.x of this plugin
+#      it is based on psutil-0.6.x; some functions that worked
+#      with psutil-0.2.x (check_psinfo v0.2-0.4) 
+#    - see contrib/ or the folloqig link for ps-util-download
+#      https://code.google.com/p/psutil
+#
 #
 #
 #NRPE_Config
@@ -53,7 +57,9 @@
 
 #
 
-version = "0.4.10.r25 - AALPHAA - 2013-01-18"
+#
+version = "0.6.8.r45 - beta - 2013-01-19"
+
 
 import psutil as ps
 import getopt, sys, time, os, string, socket
@@ -72,7 +78,11 @@ def psinfo_help():
 
 check_psinfo
     nagios_plugin to check processinfo (mem, cpu, running procs)
-    and returns perfdata
+    and return perfdata, if available
+
+    some of the checkis, when executed as nagios-user, esp. as nrpe-checks, 
+    might need to be executed using sudo; see config-examples in the header
+    of this plugin/script
     
     USAGE
      check_psinfo -t [type] [options]
@@ -80,7 +90,7 @@ check_psinfo
     TYPES
       -t mem    check memory 
                 -w usage in %
-                -c usage in %s
+                -c usage in %
                 check_psinfo -t mem -w 80 -c 90 
                 
                 -p proc_name   [*]
@@ -91,8 +101,6 @@ check_psinfo
                 you can use this to monitor / get perfdata without 
                 alerting, just skip -c / -w 
                 check_psinfo -t mem -p apache2 
-                
-                 
 
       -t proc   check for processes
                 -w total nr of procs  [*]
@@ -107,7 +115,8 @@ check_psinfo
                 
                 this might not run on systems without /proc - filesystem
                 
-                *** Please Note: this is a relative value, depending on your 
+                *** 
+                Please Note: this is a relative value, depending on your 
                 ammount of available processors
                 
                 
@@ -115,11 +124,11 @@ check_psinfo
                 
                 
       -t net    check net-connections
-                -w [nr] warn-nr of connections    [*]
-                -c [nr] crit-nr of connections    [*]
-                -l [nr] localport  (tcp) ***      [*]
-                -r [nr] remoteport (tcp) ***      [*]
-                -p [name] proc_name               [*]
+                -w [nr] warn-nr of connections                  [*]
+                -c [nr] crit-nr of connections                  [*]
+                -l [nr] localport  (tcp) ***                    [*]
+                -r [nr] remoteport (tcp) ***                    [*]
+                -p [name] proc_name                             [*]
                 
                 if yout want to check for net_conns on servers like apache
                 you need to execute this script with sudo-rights. 
@@ -133,6 +142,26 @@ check_psinfo
                 
                 check_psinfo -t net -r 5432 -c 200 -w 100 
                 -> checks for active netconns to remote port 5432                
+
+      -t nio    check for certain network-io-stats; if no -e is given, 
+                all stats will be returned, but -w/-c might not be used
+                -n if   give interface-name like ethp/lo etc;    [*]
+                        default: stats ffor all interfaces
+                -e val  check for error-val and might be:       [*]
+                        - bsent   / number of bytes sent
+                        - brecv   / number of bytes received
+                        - psent   / number of packets sent
+                        - precv   / number of packets received
+                        - errin   / total number of errors while receiving
+                        - errout  / total number of errors while sending
+                        - dropin  / total number of incoming packets which 
+                                    were dropped   
+                        - droput  / total number of outgoing packets which 
+                                    were dropped (always 0 on OSX and BSD)
+                -w [nr] warn-nr of errors                       [*]
+                -c [nr] crit-nr of errors                       [*]
+                ***
+
       
       -t uptime checks the actual uptime
                 -w [days] -> warning_number of days uptime      [*]
@@ -150,6 +179,17 @@ check_psinfo
                 -w [nr] warn-% for iowait                       [*]
                 -c [nr] crit-% for iowait                       [*]
       
+      -t disk   checks for disk_free/disk_used on given path (use -p)
+                -p path give partition/path to check,           [*]
+                  default: / 
+                -w [nr] warn-% for disk_free                    [*]
+                -W [nr] warn-MB for disk_free                   [*]
+                -c [nr] crit-% for disk_free                    [*]
+                -C [nr] crit-MB for disk_free                   [*]
+                you could either use -c / -w or -C  / -W
+                ***
+
+      
       -t iface  check if network_interface [ if ] is up, CRITICAL if not
                 -n if  - give interface-name like eth0 / virbr0 etc, 
                          defaults to eth0                       [*]
@@ -159,17 +199,11 @@ check_psinfo
     
       -v        version
       -h        help
-
-    *** -> experimental option, not yet well tested or not fully
-           implemented, DONT TRY THIS AT HOME!
-    [*] -> optional value
-
+ """
     
-    Version:
-        %s
-    
-    """ % (version)
-
+    print """
+    Version: %s
+    """ % version
 
 def return_result():
     end_time = time.time()
@@ -306,6 +340,102 @@ def psinfo_iface(iface):
     return_text="IFace %s is UP / IP = %s " % (iface, ip)
     return_result()        
 
+def psinfo_nio(action="all", iface="all"):
+
+    """
+    psinfo_nio -> show netio_stats 
+    
+    """    
+
+    global return_status, return_text, return_perfdata, return_exit
+    
+    if iface == "all":
+        nior = ps.network_io_counters(pernic=False)
+    else:
+        niox = ps.network_io_counters(pernic=True)
+        nior = niox[iface]
+
+
+    
+    w = 0
+    c = 0
+    check_wc = "no"
+    return_text="NetIO-Stats if:%s.%s" % (iface, action)
+    
+    if wv != "no":
+        try:
+            w = int(wv)
+            check_wc = "yes"
+        except:
+            print "-w must be integer"
+            sys.exit(3)
+
+        try:
+            c = int(cv)
+            check_wc = "yes"
+        except:
+            print "-c must be integer"
+            sys.exit(3)
+
+
+    bsent = nior.bytes_sent
+    brecv = nior.bytes_recv
+    psent = nior.packets_sent
+    precv = nior.packets_recv
+    errin = nior.errin
+    errout= nior.errout
+    dropin= nior.dropin
+    dropout=nior.dropout
+    
+    cval = 0
+    if action == "bsent":
+        return_perfdata="bytes_sent=%s;%s;%s;" % (bsent, w, c)
+        cval = bsent
+    elif action == "brecv":
+        return_perfdata="bytes_received=%s;%s;%s;" % (brecv, w, c)
+        cval = brecv
+    elif action == "psent":
+        return_perfdata="packets_sent=%s;%s;%s;" % (psent, w, c)
+        cval = psent
+    elif action == "precv":
+        return_perfdata="packets_received=%s;%s;%s;" % (precv, w, c)
+        cval = precv
+    elif action == "errin":
+        return_perfdata="errin=%s;%s;%s;" % (errin, w, c)
+        cval = errin
+    elif action == "errout":
+        return_perfdata="errout=%s;%s;%s;" % (errout, w, c)
+        cval = errout
+    elif action == "dropin":
+        return_perfdata="dropin=%s;%s;%s;" % (dropin, w, c)
+        cval = dropin
+    elif action == "dropout":
+        return_perfdata="dropout=%s;%s;%s;" % (dropout, w, c)
+        cval = dropout
+    else:
+        check_wc = "no"
+        return_perfdata = "bytes_sent=%s;bytes_received=%s;packets_sent=%s;packets_received=%s;errin=%s;errout=%s;dropin=%s;dropout=%s;" % (bsent, brecv, psent, precv, errin, errout, dropin, dropout)
+
+    if check_wc == "no":
+        return_status="OK"
+        return_exit=0
+        return_result()
+
+    if cval > c:
+        return_status="CRITICAL"
+        return_exit=2
+        return_result()
+        
+    elif cval > w:
+        return_status="WARNING"
+        return_exit=1
+        return_result()
+    
+    return_status="OK"
+    return_exit=0
+    return_result()
+    
+        
 
 def psinfo_net():
     """
@@ -775,13 +905,14 @@ def psinfo_mem():
             c = int(cxv)
         except:
             pass
-    
-    totalm  = ps.TOTAL_PHYMEM
-    usedm   = ps.used_phymem()
-    freem   = ps.avail_phymem()
 
-    total_buff = ps.phymem_buffers()
-    total_cache = ps.cached_phymem()
+    totalm  = ps.virtual_memory().total 
+    
+    usedm   = ps.virtual_memory().used
+    freem   = ps.virtual_memory().free
+
+    total_buff = ps.virtual_memory().buffers
+    total_cache = ps.virtual_memory().cached
 
     real_used = usedm - total_buff - total_cache
     real_free = totalm - real_used
@@ -825,7 +956,7 @@ def psinfo_mem():
     
 
 try:
-    opts, args = getopt.getopt(sys.argv[1:], "s:c:w:t:p:l:r:i:n:hdzv", 
+    opts, args = getopt.getopt(sys.argv[1:], "s:c:w:t:p:l:r:i:n:e:hdzv", 
         ["help", "script", "debug" ])
 except getopt.GetoptError, err:
     # print help information and exit:
@@ -834,13 +965,15 @@ except getopt.GetoptError, err:
     sys.exit(2)
 
 
-wv= "no"
-cv = "no"
-pv = "no"
-lv = "no"
-rv = "no"
-ip = "no"
-ifd = "eth0"
+wv      = "no"
+cv      = "no"
+pv      = "no"
+lv      = "no"
+rv      = "no"
+ip      = "no"
+ifd     = "eth0"
+nio     = "all"
+iface   = "all"
 
 for o, a in opts:
     #print "o :: " + o + "   <-->  a: " + a
@@ -856,6 +989,9 @@ for o, a in opts:
         
     elif o == "-t":
         ctype = "%s" % a
+
+    elif o == "-e":
+        nio = "%s" % a
     
     elif o == "-d":
         debug = "yes"
@@ -868,7 +1004,8 @@ for o, a in opts:
 
     elif o == "-n":
         ifd = "%s" % a 
-
+        iface = ifd
+        
     elif o == "-l":
         try:
             lv = int(a)
@@ -914,6 +1051,10 @@ elif ctype in ("proc", "procs"):
         
 elif ctype == "net":
     psinfo_net()
+    return_result()
+
+elif ctype == "nio":
+    psinfo_nio(nio, iface)
     return_result()
 
 elif ctype == "uptime":
