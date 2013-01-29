@@ -36,7 +36,7 @@
 
 import time, socket, thread, sys, os, getopt, string
 
-version = "0.4.34 - 2013-01-19"
+version = "0.4.36 - 2013-01-19"
 
 #
 # config_start

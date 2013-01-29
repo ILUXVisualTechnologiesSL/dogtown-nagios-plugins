@@ -63,7 +63,7 @@
 #
 
 #
-version = "0.6.0.10.r47 - beta - 2013-01-19"
+version = "0.6.0.10.r47 - rc1 - 2013-01-19"
 
 
 import psutil as ps
@@ -85,7 +85,7 @@ check_psinfo
     nagios_plugin to check processinfo (mem, cpu, running procs)
     and return perfdata, if available
 
-    some of the checkis, when executed as nagios-user, esp. as nrpe-checks, 
+    some of the checks, when executed as nagios-user, esp. as nrpe-checks, 
     might need to be executed using sudo; see config-examples in the header
     of this plugin/script
     
