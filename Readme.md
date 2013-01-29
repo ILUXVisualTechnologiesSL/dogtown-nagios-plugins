@@ -13,9 +13,9 @@ execute $check_plugin -h
 # Installation
 
 - download / extract the repo
- - [https://bitbucket.org/maresystem/linux-docu|Bitbucket https://bitbucket.org/maresystem/linux-docu]
- - [https://bitbucket.org/maresystem/dogtown-nagios-plugins/get/master.tar.gz| download tar.gz]
- - [https://bitbucket.org/maresystem/dogtown-nagios-plugins/get/master.zip| download zip]
+ - [https://bitbucket.org/maresystem/dogtown-nagios-plugins/src](Bitbucket https://bitbucket.org/maresystem/dogtown-nagios-plugins/src)
+ - [https://bitbucket.org/maresystem/dogtown-nagios-plugins/get/master.tar.gz]( download tar.gz)
+ - [https://bitbucket.org/maresystem/dogtown-nagios-plugins/get/master.zip](download zip)
 
 ~~~
     git clone https://bitbucket.org/maresystem/linux-docu.git
@@ -26,7 +26,8 @@ execute $check_plugin -h
 ~~~
 
 - copy plugins to your local nagios-plugins-dir
-- find infos / help in check_plugin.Readme or execute ~~~ check_plugin -h ~~~
+- find infos / help in check_plugin.Readme or execute 
+~~~ check_plugin -h ~~~
 - config-examples might be found in the header of each plugin
 - test / run them through nrpe or locally
 
@@ -45,7 +46,8 @@ package-manager.
 
 
 # License: 
-    - see License.txt
+
+- see License.txt
     
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
