@@ -1,10 +1,9 @@
 # Dogtown-Nagios-Plugins 
 
+(c) copyright 2009-2013 dogtown@mare-system.de
 
-these plugins are created for dogtown, mare systems r&d - department
-http://dogtown.mare-system.de/
-
-
+these plugins are developed and tested using Debian and SLES
+and RedHat but should work on any modern Unix.
 
 for more help see $check_plugin.Readme, if available, or 
 execute $check_plugin -h 
@@ -13,9 +12,9 @@ execute $check_plugin -h
 # Installation
 
 - download / extract the repo
- - [https://bitbucket.org/maresystem/dogtown-nagios-plugins/src](Bitbucket https://bitbucket.org/maresystem/dogtown-nagios-plugins/src)
- - [https://bitbucket.org/maresystem/dogtown-nagios-plugins/get/master.tar.gz]( download tar.gz)
- - [https://bitbucket.org/maresystem/dogtown-nagios-plugins/get/master.zip](download zip)
+ - [Bitbucket https://bitbucket.org/maresystem/dogtown-nagios-plugins/src](https://bitbucket.org/maresystem/dogtown-nagios-plugins/src)
+ - [download tar.gz](https://bitbucket.org/maresystem/dogtown-nagios-plugins/get/master.tar.gz) 
+ - [download zip](https://bitbucket.org/maresystem/dogtown-nagios-plugins/get/master.zip)
 
 ~~~
     git clone https://bitbucket.org/maresystem/linux-docu.git
