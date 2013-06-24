@@ -28,8 +28,10 @@ host = "localhost"
 port = 80
 
 def usage():
-   print """check_nginx_status is a Nagios-Plugin 
-to monitor nginx status and alert on various 
+   print """
+
+check_nginx_status is a Nagios-Plugin 
+to monitor nginx status and alerts on various values to test for
 
    Usage:
 
@@ -63,7 +65,7 @@ to monitor nginx status and alert on various
             ***
           
           --test|-t)
-            Sets the test_value for w/c
+            Sets the test(check)_value for w/c
             if used, -w/-c is mandatory
             Default: checktime
             possible Values:
@@ -79,11 +81,11 @@ to monitor nginx status and alert on various
 
                 
           --warning|-w)
-            Sets a warning level for nginx Active connections. 
+            Sets a warning level for selected test(check)
             Default: off
           
           --critical|-c)
-            Sets a critical level for nginx Active connections. 
+            Sets a critical level for selected test(check)
             Default: off
             
           --debug|-d)
@@ -96,8 +98,8 @@ to monitor nginx status and alert on various
         
         *** ) -> please dont use this option, not implemented or not functional
 
-	Example:
-            The url is www.example.com/status w/ login, just get values
+	Examples:
+            The url is www.example.com/status w/ login, just get perfdata
             ./check_nginx_status -H www.example.com -u /status -u useerrr -p passswwdddd 
 
             check for plugin_checktime, error > 10ms (warning) or 50ms (error)
@@ -115,13 +117,13 @@ to monitor nginx status and alert on various
             https://bitbucket.org/maresystem/dogtown-nagios-plugins
     
             """
- 
-   sys.exit(3)
 
 def ver():
     print """
 check_nginx_status
-    version: %s
+    version : %s
+    
+    usage   : check_nginx_status -h
     
     """ % version
 
@@ -148,10 +150,10 @@ try:
     iv = sys.argv[1]
 except:
     print """
-
+    
 usage: check_nginx_status -h
 
-    """
+-----------------------------------------------------"""
     usage()
     sys.exit(3)
     
@@ -267,7 +269,7 @@ if len(status) == 0:
 
 try:
     et = time.time()
-    rt = int((et - st)*1000)
+    ct = int((et - st)*1000)
     l1 = status[0]
     ac = int(l1.split(":")[1].strip())
     l2 = status[2]
@@ -300,13 +302,13 @@ reading         :   %s
 writing         :   %s
 waiting         :   %s
 
-run_time        :   %s ms
+checktime       :   %s ms
 
-""" % (ac, acc, han, req, err, read, writ, wait, rt  )) 
+""" % (ac, acc, han, req, err, read, writ, wait, ct  )) 
 
-perfdata = "ac=%s;acc=%s; han=%s; req=%s; err=%s; read=%s; writ=%s; wait=%s; rt=%sms;"   % (ac, acc, han, req, err, read, writ, wait, rt  ) 
+perfdata = "ac=%s;acc=%s; han=%s; req=%s; err=%s; read=%s; writ=%s; wait=%s; ct=%sms;"   % (ac, acc, han, req, err, read, writ, wait, ct  ) 
 
-print_debug("perfdata: \n     %s" % perfdata)
+print_debug("perfdata: %s" % perfdata)
 
 
 if test == 0:
@@ -358,7 +360,7 @@ elif test == "waiting":
     tt = "Waiting"
 
 else:
-    ta = rt
+    ta = ct
     tt = "CheckTime"
     
 print_debug("set test: %s" % tt)
