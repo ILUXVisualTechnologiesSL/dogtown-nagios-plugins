@@ -4,7 +4,6 @@ INSTALL
 LICENSE
 MANIFEST.in
 README
-setup.cfg
 setup.py
 examples/disk_usage.py
 examples/free.py

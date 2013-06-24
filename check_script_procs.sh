@@ -4,6 +4,8 @@
 #
 # usefull if you want to check for scripts, not processes 
 #
+# dload: https://bitbucket.org/maresystem/dogtown-nagios-plugins/src
+#
 #
 
 # You may have to change this, depending on where you installed your

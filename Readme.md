@@ -12,7 +12,7 @@ execute $check_plugin -h
 # Installation
 
 - download / extract the repo
- - [Bitbucket https://bitbucket.org/maresystem/dogtown-nagios-plugins/src](https://bitbucket.org/maresystem/dogtown-nagios-plugins/src)
+ - [Bitbucket ](https://bitbucket.org/maresystem/dogtown-nagios-plugins/src)
  - [download tar.gz](https://bitbucket.org/maresystem/dogtown-nagios-plugins/get/master.tar.gz) 
  - [download zip](https://bitbucket.org/maresystem/dogtown-nagios-plugins/get/master.zip)
 

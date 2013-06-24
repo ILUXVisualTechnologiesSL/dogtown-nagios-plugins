@@ -1,25 +1,42 @@
 #!/usr/bin/python
 #
 # this plugin was initially created by yangzi2008@126.com 
-# and is based upon 
+# and is inspired by 
 # http://exchange.nagios.org/directory/Plugins/Web-Servers/nginx/check_nginx/details
 # 
 # 
 # modified by dogtown with more features
 # 
+# (c) copyright 2010,2011,2012,2013 dogtown@mare-system.de
+# 
 # License: GPL v2 
+#
+# dload: https://bitbucket.org/maresystem/dogtown-nagios-plugins/src
 #
 
 import string
 import urllib2
 import getopt
 import sys
+import time
+
+version = "0.2.16 - testing - 2013-06-24"
+
+### default_values
+
+url = "/nginx_status"
+host = "localhost"
+port = 80
 
 def usage():
-   print """check_nginx_status is a Nagios-Plugin to monitor nginx status
+   print """check_nginx_status is a Nagios-Plugin 
+to monitor nginx status and alert on various 
+
    Usage:
 
-   check_nginx_status [-h|--help][-H|--HOST][-P|--path][-u|--user][-p|--passwd][-w|--warning][-c|--critical]
+   check_nginx_status [-H|--HOST][-p|--port][-u|--url][-a|--auth][-s|--ssl]
+                      [-t|--test][-w|--warning][-c|--critical]
+                      [-h|--help][-v|--version][-d|--debug]
 
    Options:
           --help|-h)
@@ -27,19 +44,23 @@ def usage():
           --HOST|-H)
             Sets nginx host
             Default: localhost
-          --path|-P)
+          --port|-p)
+            Sets connection-port 
+            Default: 80/http, 443/https
+          --ssl|-s)
+            Turns on SSL
+            Default: off
+          --url|-u)
             Sets nginx status url path. 
             Default: /nginx_status
-          --user|-u)
-            Sets nginx status BasicAuth user. 
+          --auth|-a)
+            Sets nginx status BasicAuth user:password. 
             Default: off
-          --passwd|-p)
-            Sets nginx status BasicAuth passwd. 
-            Default: off
+            ***
           --test|-t)
             Sets the test_value for w/c
             if used, -w/-c is mandatory
-            Default: active_conn
+            Default: checktime
             possible Values:
                 active_conn     -> active connections
                 accepts_err     -> difference between accepted and 
@@ -48,6 +69,9 @@ def usage():
                 reading         -> actual value for reading headers
                 writing         -> value for active requests
                 waiting         -> actual keep-alive-connections
+                checktime       -> checks if this check need more than
+                                   given -w/-c milliseconds 
+
                 
           --warning|-w)
             Sets a warning level for nginx Active connections. 
@@ -55,92 +79,297 @@ def usage():
           --critical|-c)
             Sets a critical level for nginx Active connections. 
             Default: off
+            
+          --debug|-d)
+            turn on debugging - messages
+            Default: off 
+            
+          --version|-v)
+            display version and exit
+        
+        *** ) -> please dont use this option, not implemented or not functional
+
 	Example:
             The url is www.example.com/status w/ login, just get values
-            ./check_nginx_status -H www.example.com -P /status -u userrr -p passwdddd -w 1000 -c 2000
-            
-            check for active connections w/ error
-            ./check_nginx_status -H www.example.com -P /status  -w 500 -c 2000
+            ./check_nginx_status -H www.example.com -u /status -u useerrr -p passswwdddd 
 
+            check for plugin_checktime, error > 10ms (warning) or 50ms (error)
+            ./check_nginx_status -H www.example.com -u /status  -w 10 -c 50
+            
+            check for active connections, alert on > 500/2000 active connections
+            ./check_nginx_status -H www.example.com -u /status -t active_conn -w 500 -c 2000
 
             Check for accepts_errors:
-            ./check_nginx_status -H www.example.com -P /status -t accepts_err -w 1 -c 50
+            ./check_nginx_status -H www.example.com -t accepts_err -w 1 -c 50
             
-            
+    
+    Docs & Download:
+
+            https://bitbucket.org/maresystem/dogtown-nagios-plugins
+    
             """
  
    sys.exit(3)
 
+def ver():
+    print """
+check_nginx_status
+    version: %s
+    
+    """ % version
+
+def print_debug(dtext):
+    if debug == 1:
+        print "[d] %s" % dtext
+    return(0)
+
+
+
+#### main
+
+exot = 0
+ssl = 0
+debug = 0
+test = 0
+w = c = 0
+user = passwd = 0
+msg = "CheckNginx - UNKNOWN"
+perfdata = ""
+
+
 try:
-    options,args = getopt.getopt(sys.argv[1:],"hH:P:u:p:w:c:",["help","HOST=","path=","user=","passwd=","warning=","critical="])
+    iv = sys.argv[1]
+except:
+    print """
+
+usage: check_nginx_status -h
+
+    """
+    usage()
+    sys.exit(3)
+    
+
+try:
+    options,args = getopt.getopt(sys.argv[1:],"dvDshH:p:u:p:w:c:t:",["help","SSL","Debug","HOST=","Port=","Auth=","Test=","Url=","passwd=","warning=","critical="])
 
 except getopt.GetoptError:
-   usage()
-   sys.exit(3)
+    usage()
+    sys.exit(3)
 
-### default_values
 
-path = "/nginx_status"
-host = "localhost"
 
+# dont change 
 
 for name,value in options:
 
     if name in ("-H","--HOST"):
-       host = "%s" % value
-    elif name in ("-P","--path"):
-       path = value
-    elif name in ("-u","--user"):
-       user = value
-    elif name in ("-p","--passwd"):
-       passwd = value
-    elif name in ("-w","--warning"):
-       warning = value
-    elif name in ("-c","--critical"):
-       critical = value
-    else:
-       usage()
-       sys.exit(1)
-try:
-   if 'path' in dir():
-      req = urllib2.Request(host+path)
-   else:
-      req = urllib2.Request(host)
-   if 'user' in dir() and 'passwd' in dir():
-      passman = urllib2.HTTPPasswordMgrWithDefaultRealm()
-      passman.add_password(None, url+path, user, passwd)
-      authhandler = urllib2.HTTPBasicAuthHandler(passman)
-      opener = urllib2.build_opener(authhandler)
-      urllib2.install_opener(opener)
-   response = urllib2.urlopen(req)
-   the_page = response.readlines()
-   
-   #~ conn = the_page.split()
-   #~ ActiveConn = conn[2]
-   #~ the_page1 = response.readline()
-   #~ the_page2 = response.readline()
-   #~ the_page3 = response.readline()
-   response.close()
-   #~ b = the_page3.split()
-   #~ reading = b[1]
-   #~ writing = b[3]
-   #~ waiting = b[5]
-   output = 'ActiveConn:%s,reading:%s,writing:%s,waiting:%s' % (ActiveConn,reading,writing,waiting)
-   perfdata = 'ActiveConn:%s,reading:%s,writing:%s,waiting:%s' % (ActiveConn,reading,writing,waiting)
+        host = "%s" % value
+    elif name in ("-u","--Url"):
+        url = value
+    elif name in ("-a","--Auth"):
+        user, passwd = value.split(":")
+    elif name in ("-s","--SSL"):
+        ssl = 1
+    elif name in ("-t","--Test"):
+        test = "%s" % value 
+    elif name in ("-d","--Debug"):
+        debug = 1
+    elif name in ("-p","--Port"):
+        try:
+            port = int(value)
+        except:
+            print("""%s Usage.ERROR - -p [PORT] must be an Integer """ % msg)    
+            exot = 3
 
-except Exception:
-   print "NGINX STATUS unknown: Error while getting Connection"
-   sys.exit(3)
-if 'warning' in dir() and 'critical' in dir():
-   if ActiveConn >= warning:
-      print 'WARNING - %s|%s' % (output,perfdata)
-      sys.exit(2)
-   elif ActiveConn >= critical:
-      print 'CRITICAL - %s|%s' % (output,perfdata)
-      sys.exit(1)
-   else:
-      print 'OK - %s|%s' % (output,perfdata)
-      sys.exit(0)
+    elif name in ("-w","--warning"):
+        try:
+            w = int(value)
+        except:
+            print("""%s Usage.ERROR -w [WARNING] must be an Integer    """ % msg)
+            exot = 3
+
+    elif name in ("-c","--critical"):
+        try:
+            c = int(value)
+        except:
+            print("""%s Usage.ERROR -c [CRITICAL] must be an Integer    """ % msg)
+            exot = 3
+
+    elif name in ("-v","--version"):
+        ver()
+        sys.exit(0)
+    
+    else:
+        usage()
+        ver()
+        sys.exit(0)
+
+if exot != 0:
+    sys.exit(exot)
+
+# creating test-url
+
+if host.find("http") > -1:
+    print("""%s Usage.ERROR - use -H [hostname], NOT -H [http://hostname] (%s)""" (msg, host))
+    sys.exit(3)
+
+if ssl == 1:
+    turl = "https://%s" % host
+    print_debug("setting HTTP**S**")
 else:
-   print 'OK - %s|%s' % (output,perfdata)
-   sys.exit(0)
+    turl = "http://%s" % host
+    print_debug("setting HTTP")
+
+
+if port != 80:
+    turl = "%s:%s" % (turl, port)
+    print_debug("setting Port: %s" % port)
+
+curl = "%s%s" % (turl, url)
+print_debug("final url to fetch: %s" % curl)
+
+
+
+st = time.time()
+req = urllib2.Request(curl)
+#~ if 'user' in dir() and 'passwd' in dir():
+    #~ passman = urllib2.HTTPPasswordMgrWithDefaultRealm()
+    #~ passman.add_password(None, curl, user, passwd)
+    #~ authhandler = urllib2.HTTPBasicAuthHandler(passman)
+    #~ opener = urllib2.build_opener(authhandler)
+    #~ urllib2.install_opener(opener)
+
+
+try:
+
+    response = urllib2.urlopen(req)
+    status = response.readlines()
+    response.close()
+
+
+# TODO: http://stackoverflow.com/questions/2712524/handling-urllib2s-timeout-python
+except Exception:
+   print "%s: Error while getting Connection :: %s " % (msg, curl)
+   sys.exit(3)
+
+if len(status) == 0:
+   print "%s: No values found in %s " % (msg , curl)
+   sys.exit(3)
+    
+
+try:
+    et = time.time()
+    rt = int((et - st)*1000)
+    l1 = status[0]
+    ac = int(l1.split(":")[1].strip())
+    l2 = status[2]
+    acc, han, req = l2.split()
+    acc = int(acc)
+    han = int(han)
+    req = int(req)
+    err = acc - han
+    
+    l3 = status[3]
+    read = int((l3.split("Reading:")[1]).split()[0])
+    writ = int((l3.split("Writing:")[1]).split()[0])
+    wait = int((l3.split("Waiting:")[1]).split()[0])
+
+except:
+   print "%s: Error while trying to convert values from status_url %s " % (msg , curl)
+   for line in status:
+       print "  :: %s" % line.strip()
+   sys.exit(3)
+
+    
+print_debug("""-- status-report (perfdata)---
+
+active_conns    :   %s
+accepted conns  :   %s    
+handled         :   %s
+reqests         :   %s
+accept_errors   :   %s
+reading         :   %s
+writing         :   %s
+waiting         :   %s
+
+run_time        :   %s ms
+
+""" % (ac, acc, han, req, err, read, writ, wait, rt  )) 
+
+perfdata = "ac=%s;acc=%s; han=%s; req=%s; err=%s; read=%s; writ=%s; wait=%s; rt=%sms;"   % (ac, acc, han, req, err, read, writ, wait, rt  ) 
+
+
+
+if test == 0:
+    if w == 0 or c == 0:
+        pass
+    else:
+        test = "checktime"
+
+if test != 0:
+    if w == 0:
+        print("""Usage.ERROR :: -w [WARNING] must be set and Integer (cannot be 0)""")
+        sys.exit(3)
+    
+    if c == 0:
+        print("""Usage.ERROR :: -c [CRITICAL] must be set and Integer (cannot be 0)""")
+        sys.exit(3)
+        
+# default test_text
+tt = "unknown"
+
+# checking which test to perform
+if test == 0:
+    tt = "Check"
+elif test == "active_conn":
+    ta = ac
+    tt = "ActiveConnections"
+elif test == "accepts_err":
+    ta = err
+    tt = "AcceptErrors"
+
+elif test == "req_conns":
+    ta = req
+    tt = "Requests/Connection"
+
+elif test == "req_conns":
+    ta = req
+    tt = "Requests/Connection"
+
+elif test == "reading":
+    ta = read
+    tt = "Reading"
+
+elif test == "writing":
+    ta = writ
+    tt = "Writing"
+
+elif test == "waiting":
+    ta = wait
+    tt = "Waiting"
+
+else:
+    ta = rt
+    tt = "CheckTime"
+    
+print_debug("set test: %s" % tt)
+
+dt = "NginxStatus.%s" % tt
+
+if test == 0:
+    print "%s OK | %s" % (dt, perfdata)
+    sys.exit(0)
+
+if ta >= c:
+    print "%s CRITICAL: %s | %s" % (dt, ta, perfdata)
+    sys.exit(2)
+    
+elif ta >= w:
+    print "%s WARNING: %s | %s" % (dt, ta, perfdata)
+    sys.exit(1)
+
+else:
+    print "%s OK | %s" % (dt, perfdata)
+    
+
+
