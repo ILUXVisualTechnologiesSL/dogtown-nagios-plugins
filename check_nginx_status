@@ -1,11 +1,10 @@
 #!/usr/bin/python
 #
-# this plugin was initially created by yangzi2008@126.com 
-# and is inspired by 
+# this plugin is inspired by yangzi2008@126.com 
 # http://exchange.nagios.org/directory/Plugins/Web-Servers/nginx/check_nginx/details
 # 
 # 
-# modified by dogtown with more features
+# reimplemented by dogtown with more features
 # 
 # (c) copyright 2010,2011,2012,2013 dogtown@mare-system.de
 # 
@@ -20,7 +19,7 @@ import getopt
 import sys
 import time
 
-version = "0.2.16 - testing - 2013-06-24"
+version = "0.2.18 - testing - 2013-06-24"
 
 ### default_values
 
@@ -40,23 +39,29 @@ to monitor nginx status and alert on various
 
    Options:
           --help|-h)
-            print check_nginx help.
+            print check_nginx_status help
+            
           --HOST|-H)
             Sets nginx host
             Default: localhost
+          
           --port|-p)
             Sets connection-port 
             Default: 80/http, 443/https
+          
           --ssl|-s)
             Turns on SSL
             Default: off
+          
           --url|-u)
             Sets nginx status url path. 
             Default: /nginx_status
+          
           --auth|-a)
             Sets nginx status BasicAuth user:password. 
             Default: off
             ***
+          
           --test|-t)
             Sets the test_value for w/c
             if used, -w/-c is mandatory
@@ -76,12 +81,14 @@ to monitor nginx status and alert on various
           --warning|-w)
             Sets a warning level for nginx Active connections. 
             Default: off
+          
           --critical|-c)
             Sets a critical level for nginx Active connections. 
             Default: off
             
           --debug|-d)
-            turn on debugging - messages
+            turn on debugging - messages (use this for manual testing, 
+            never via nagios-checks; beware of the messy output
             Default: off 
             
           --version|-v)
@@ -244,6 +251,7 @@ try:
 
     response = urllib2.urlopen(req)
     status = response.readlines()
+    print_debug("returned_status from url: \n    %s" % "    ".join(status))
     response.close()
 
 
@@ -298,6 +306,7 @@ run_time        :   %s ms
 
 perfdata = "ac=%s;acc=%s; han=%s; req=%s; err=%s; read=%s; writ=%s; wait=%s; rt=%sms;"   % (ac, acc, han, req, err, read, writ, wait, rt  ) 
 
+print_debug("perfdata: \n     %s" % perfdata)
 
 
 if test == 0:
