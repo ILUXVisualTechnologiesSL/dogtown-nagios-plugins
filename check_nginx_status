@@ -1,0 +1,146 @@
+#!/usr/bin/python
+#
+# this plugin was initially created by yangzi2008@126.com 
+# and is based upon 
+# http://exchange.nagios.org/directory/Plugins/Web-Servers/nginx/check_nginx/details
+# 
+# 
+# modified by dogtown with more features
+# 
+# License: GPL v2 
+#
+
+import string
+import urllib2
+import getopt
+import sys
+
+def usage():
+   print """check_nginx_status is a Nagios-Plugin to monitor nginx status
+   Usage:
+
+   check_nginx_status [-h|--help][-H|--HOST][-P|--path][-u|--user][-p|--passwd][-w|--warning][-c|--critical]
+
+   Options:
+          --help|-h)
+            print check_nginx help.
+          --HOST|-H)
+            Sets nginx host
+            Default: localhost
+          --path|-P)
+            Sets nginx status url path. 
+            Default: /nginx_status
+          --user|-u)
+            Sets nginx status BasicAuth user. 
+            Default: off
+          --passwd|-p)
+            Sets nginx status BasicAuth passwd. 
+            Default: off
+          --test|-t)
+            Sets the test_value for w/c
+            if used, -w/-c is mandatory
+            Default: active_conn
+            possible Values:
+                active_conn     -> active connections
+                accepts_err     -> difference between accepted and 
+                                   handled requests (should be 0)
+                req_conns       -> check for requests/connection
+                reading         -> actual value for reading headers
+                writing         -> value for active requests
+                waiting         -> actual keep-alive-connections
+                
+          --warning|-w)
+            Sets a warning level for nginx Active connections. 
+            Default: off
+          --critical|-c)
+            Sets a critical level for nginx Active connections. 
+            Default: off
+	Example:
+            The url is www.example.com/status w/ login, just get values
+            ./check_nginx_status -H www.example.com -P /status -u userrr -p passwdddd -w 1000 -c 2000
+            
+            check for active connections w/ error
+            ./check_nginx_status -H www.example.com -P /status  -w 500 -c 2000
+
+
+            Check for accepts_errors:
+            ./check_nginx_status -H www.example.com -P /status -t accepts_err -w 1 -c 50
+            
+            
+            """
+ 
+   sys.exit(3)
+
+try:
+    options,args = getopt.getopt(sys.argv[1:],"hH:P:u:p:w:c:",["help","HOST=","path=","user=","passwd=","warning=","critical="])
+
+except getopt.GetoptError:
+   usage()
+   sys.exit(3)
+
+### default_values
+
+path = "/nginx_status"
+host = "localhost"
+
+
+for name,value in options:
+
+    if name in ("-H","--HOST"):
+       host = "%s" % value
+    elif name in ("-P","--path"):
+       path = value
+    elif name in ("-u","--user"):
+       user = value
+    elif name in ("-p","--passwd"):
+       passwd = value
+    elif name in ("-w","--warning"):
+       warning = value
+    elif name in ("-c","--critical"):
+       critical = value
+    else:
+       usage()
+       sys.exit(1)
+try:
+   if 'path' in dir():
+      req = urllib2.Request(host+path)
+   else:
+      req = urllib2.Request(host)
+   if 'user' in dir() and 'passwd' in dir():
+      passman = urllib2.HTTPPasswordMgrWithDefaultRealm()
+      passman.add_password(None, url+path, user, passwd)
+      authhandler = urllib2.HTTPBasicAuthHandler(passman)
+      opener = urllib2.build_opener(authhandler)
+      urllib2.install_opener(opener)
+   response = urllib2.urlopen(req)
+   the_page = response.readlines()
+   
+   #~ conn = the_page.split()
+   #~ ActiveConn = conn[2]
+   #~ the_page1 = response.readline()
+   #~ the_page2 = response.readline()
+   #~ the_page3 = response.readline()
+   response.close()
+   #~ b = the_page3.split()
+   #~ reading = b[1]
+   #~ writing = b[3]
+   #~ waiting = b[5]
+   output = 'ActiveConn:%s,reading:%s,writing:%s,waiting:%s' % (ActiveConn,reading,writing,waiting)
+   perfdata = 'ActiveConn:%s,reading:%s,writing:%s,waiting:%s' % (ActiveConn,reading,writing,waiting)
+
+except Exception:
+   print "NGINX STATUS unknown: Error while getting Connection"
+   sys.exit(3)
+if 'warning' in dir() and 'critical' in dir():
+   if ActiveConn >= warning:
+      print 'WARNING - %s|%s' % (output,perfdata)
+      sys.exit(2)
+   elif ActiveConn >= critical:
+      print 'CRITICAL - %s|%s' % (output,perfdata)
+      sys.exit(1)
+   else:
+      print 'OK - %s|%s' % (output,perfdata)
+      sys.exit(0)
+else:
+   print 'OK - %s|%s' % (output,perfdata)
+   sys.exit(0)
