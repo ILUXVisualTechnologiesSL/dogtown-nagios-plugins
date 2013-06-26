@@ -1,30 +1,47 @@
 #!/usr/bin/python
 #
-# this plugin is inspired by yangzi2008@126.com 
-# http://exchange.nagios.org/directory/Plugins/Web-Servers/nginx/check_nginx/details
-# 
-# reimplemented by dogtown with more features
-# 
 # (c) copyright 2012,2013 dogtown@mare-system.de
 # 
 # License: GPL v2 
 #
 # dload: https://bitbucket.org/maresystem/dogtown-nagios-plugins
 #
+#
+# credits / this plugin is inspired by:
+#   check_nginx
+#   yangzi2008@126.com
+#   http://exchange.nagios.org/directory/Plugins/Web-Servers/nginx/check_nginx/details
+#
+#   check_nginx_status.pl
+#   regis.leroy@gmail.com 
+#   http://exchange.nagios.org/directory/Plugins/Web-Servers/nginx/check_nginx_status-2Epl/details 
+#
+# reimplemented by dogtown with more features
+# 
 
-import string
-import urllib2
-import getopt
-import sys
-import time
+import string, urllib2, getopt, sys, time, os
 
-version = "0.2.28 - testing - 2013-06-26"
+version = "0.2.32 - testing - 2013-06-26"
 
 ### default_values
 
-url = "/nginx_status"
-host = "localhost"
-port = 80
+# default status url
+url     = "/nginx_status"
+
+# default host to check
+host    = "localhost"
+
+# default nginx_poret; is set to 443 if -s is used
+port    = 80
+
+# default result-file for calculations, see -r/-n options
+# set to 0 if you want to deactivate this feature globally,
+#   can be turned on using -r if so
+result_file = "/tmp/check_nginx.results"
+
+
+# definitions
+
 
 def usage():
    print """
@@ -34,10 +51,11 @@ to monitor nginx status and alerts on various values to test for
 
    Usage:
 
-   check_nginx_status [-H|--HOST][-p|--port][-u|--url][-a|--auth][-s|--ssl]
-                      [-t|--test][-w|--warning][-c|--critical]
-                      [-o|--output]
-                      [-h|--help][-v|--version][-d|--debug]
+   check_nginx_status [-H|--HOST] [-p|--port] [-u|--url] [-a|--auth] [-s|--ssl]
+                      [-t|--test] [-w|--warning] [-c|--critical]
+                      [-o|--output] [-r|--resultfile]
+                      [-h|--help] [-v|--version] [-d|--debug]
+
 
    Options:
           --help|-h)
@@ -80,6 +98,19 @@ to monitor nginx status and alerts on various values to test for
                 checktime       -> checks if this check need more than
                                    given -w/-c milliseconds 
                 
+            --calculated checks ---------------
+                rps             -> requests per seconds
+                cps             -> connections per second
+                dreq            -> delta requests to the previous one
+                dcon            -> delta connections to the previous one
+                
+                these checks are calculated at runtime with a timeframe 
+                between the latest and the current check; time is 
+                extracted from the timestamp of the result_file
+                
+                to disable this option (no files ar written) use -n
+                see -r - option for an alternate filepath
+                
           --warning|-w)
             Sets a warning level for selected test(check)
             Default: off
@@ -99,13 +130,26 @@ to monitor nginx status and alerts on various values to test for
           --output|-o)
             output only values from selected tests in perfdata; if used w/out -t
             the check returns the value for active connections
-             
+        
+          --resultfile|-r)
+            /path/to/check_nginx.results{.csv}
+            please note, beside the values from the actual check 
+            (eg.g check_nginx.results) a second
+            file is created, if not existent, and written on each plugin-run
+            (check_nginx.results.csv), containign a historic view on all 
+            extracted values
+            default: /tmp/check_nginx.results{.csv}
+
+          --noresult|-n)
+            never write a results-file; CANNOT be used with calculated checks 
+            -t [rps|cps|dreq|dcon] 
+            default: off 
         
         *** ) -> please dont use this option, not implemented or not functional
 
     Examples:
             just get all perfdata, url is default (/nginx_status)
-            ./check_nginx_status -H www.example.com 
+            ./check_nginx_status --HOST www.example.com 
 
             just get active connections perfdata
             ./check_nginx_status -H www.example.com -o 
@@ -129,11 +173,17 @@ to monitor nginx status and alerts on various values to test for
             han     -> totally handled connections
             req     -> total requests
             rpc     -> requests per connection (req/han) 
+            rps     -> requests per second (calculated) from last checkrun to this
+            cps     -> connections per (calculated) from last checkrun to this
+            dreq    -> request-delta from last checkrun to this 
+            dcon    -> accepted-connection-delta from last checkrun to this 
             err     -> diff between acc - han, thus errors
             read    -> reading requests from clients
             writ    -> reading request body, processes request, or writes response to a client
             wait    -> keep-alive connections, actually it is ac - (read + writ)
             ct      -> checktime (connection time) for this check
+    
+        rpc/rps/dreq/dcon are always set to 0 if -n is used
     
     Nginx-Config
             be sure to have your nginx compiled with Status-Module
@@ -169,8 +219,77 @@ def print_debug(dtext):
     return(0)
 
 
+def calculate():
+    rps = cps = dreq = dcon = 0
+    if result_file != 0:
+        if not os.path.isfile(result_file):
+            print_debug("no result_file found, creating with next run :: %s " % result_file)
+        else:
+#~ 
 
-#### main
+            try:
+                f = open(result_file, "r")
+                ro = f.readline().split(";")
+                f.close()
+                o_ac    = int(ro[0])
+                o_acc   = int(ro[1])
+                o_han   = int(ro[2])
+                o_req   = int(ro[3])
+                o_err   = int(ro[4])
+                o_rpc   = int(ro[5])
+                o_rps   = int(ro[6])
+                o_cps   = int(ro[7])
+                o_dreq  = int(ro[8])
+                o_dcon  = int(ro[9])
+                o_read  = int(ro[10])
+                o_writ  = int(ro[11])
+                o_wait  = int(ro[12])
+                o_ct    = int(ro[13])
+                now     = int(time.time())
+                last    = int(os.path.getmtime(result_file))
+                dtime   = now - last 
+                dreq    = req - int(o_req)
+                rps     = int(dreq / dtime)
+                dcon    = acc - int(o_acc)
+                cps     = int(dcon / dtime)
+
+            except:
+                print_debug("cannot read/process result_file :: %s \n use -r" % result_file)
+                #return(rps, cps, dreq, dcon)
+            
+            
+            
+            
+
+    print_debug("writing result_file -> %s" % result_file)
+    try:
+        f = open(result_file, "w")
+        f.write("%s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s;" % (ac, acc, han, req, err, rpc, rps, cps, dreq, dcon, read, writ, wait, ct))
+        f.close()
+    except:
+        print_debug("cannot create result_file :: %s \n use -r" % result_file)
+        return(rps, cps, dreq, dcon)
+    csv = "%s.csv" % result_file
+    if not os.path.isfile(csv):
+        try:
+            print_debug("creating result_file.csv -> %s" % result_file)
+            f = open(csv, "w")
+            f.write(""""active conns"; "accepted"; "handled"; "requests"; "req_errors"; "reqs per conn"; "reqs per sec"; "conns per sec"; "delta reqs"; "delta conns"; "reading"; "writing"; "waiting"; "checktime"; \n""")
+        except:
+            print "ERR.cannot create result_file.csv :: %s \n use -r" % csv
+
+    print_debug("writing result_file.csv -> %s.csv" % result_file)
+    try:
+        f = open(csv, "a")
+        f.write("%s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s;" % (ac, acc, han, req, err, rpc, rps, cps, dreq, dcon, read, writ, wait, ct))
+        f.close()
+    except:
+        print "ERR.cannot write result_file.csv :: %s \n use -r" % csv 
+
+    return(rps, cps, dreq, dcon)
+
+
+#### main 
 
 exot = 0
 ssl = 0
@@ -196,7 +315,7 @@ usage: check_nginx_status -h
     
 
 try:
-    options,args = getopt.getopt(sys.argv[1:],"dovDshH:p:u:p:w:c:t:",["help","SSL","Debug","HOST=","Port=","Auth=","Test=","Url=","passwd=","warning=","critical=", "output"])
+    options,args = getopt.getopt(sys.argv[1:],"dovDshH:p:u:p:w:c:t:r:",["help","SSL","Debug","HOST","port","auth","test","url","warning","critical=", "output", "resultfile"])
 
 except getopt.GetoptError:
     usage()
@@ -204,7 +323,7 @@ except getopt.GetoptError:
 
 
 
-# dont change 
+
 
 for name,value in options:
 
@@ -220,6 +339,9 @@ for name,value in options:
     elif name in ("-s","--ssl"):
         ssl = 1
 
+    elif name in ("-r","--resultfile"):
+        result_file = "%s" % value
+
     elif name in ("-t","--test"):
         test = "%s" % value 
 
@@ -228,6 +350,9 @@ for name,value in options:
 
     elif name in ("-o","--output"):
         output = 1
+
+    elif name in ("-n","--noresult"):
+        result_file = 0
 
     elif name in ("-p","--port"):
         try:
@@ -284,23 +409,24 @@ curl = "%s%s" % (turl, url)
 print_debug("final url to fetch: %s" % curl)
 
 
-
+# start_time for checktime-calculation    
 st = time.time()
-req = urllib2.Request(curl)
-#~ if 'user' in dir() and 'passwd' in dir():
-    #~ passman = urllib2.HTTPPasswordMgrWithDefaultRealm()
-    #~ passman.add_password(None, curl, user, passwd)
-    #~ authhandler = urllib2.HTTPBasicAuthHandler(passman)
-    #~ opener = urllib2.build_opener(authhandler)
-    #~ urllib2.install_opener(opener)
+
 
 
 try:
 
+    req = urllib2.Request(curl)
     response = urllib2.urlopen(req)
     status = response.readlines()
     print_debug("returned_status from url: \n    %s" % "    ".join(status))
     response.close()
+    #~ if 'user' in dir() and 'passwd' in dir():
+        #~ passman = urllib2.HTTPPasswordMgrWithDefaultRealm()
+        #~ passman.add_password(None, curl, user, passwd)
+        #~ authhandler = urllib2.HTTPBasicAuthHandler(passman)
+        #~ opener = urllib2.build_opener(authhandler)
+        #~ urllib2.install_opener(opener)
 
 
 # TODO: http://stackoverflow.com/questions/2712524/handling-urllib2s-timeout-python
@@ -308,13 +434,16 @@ except Exception:
    print "%s: Error while getting Connection :: %s " % (msg, curl)
    sys.exit(3)
 
+
+
 if len(status) == 0:
    print "%s: No values found in %s " % (msg , curl)
    sys.exit(3)
-    
+
+# end_time for checktime-calculation    
+et = time.time()
 
 try:
-    et = time.time()
     ct = int((et - st)*1000)
     l1 = status[0]
     ac = int(l1.split(":")[1].strip())
@@ -336,7 +465,13 @@ except:
        print "  :: %s" % line.strip()
    sys.exit(3)
 
+# calculate results, if wanted
+
+rps, cps, dreq, dcon = calculate()
     
+# creating needed output
+
+
 print_debug("""-- status-report (perfdata)---
 
 active_conns    :   %s
@@ -344,14 +479,18 @@ accepted conns  :   %s
 handled         :   %s
 requests        :   %s
 accept_errors   :   %s
-req per conn    : %s
+req per conn    :   %s
+req per second  :   %s
+conn per second :   %s
+delta requests  :   %s
+delta conns     :   %s
 reading         :   %s
 writing         :   %s
 waiting         :   %s
 
 checktime       :   %s ms
 
-""" % (ac, acc, han, req, err, rpc, read, writ, wait, ct  )) 
+""" % (ac, acc, han, req, err, rpc, rps, cps, dreq, dcon, read, writ, wait, ct  )) 
 
 
 #~ if test == 0:
@@ -400,6 +539,24 @@ elif test == "waiting":
     ta = wait
     tt = "Waiting"
 
+# calculated checks
+elif test == "rps":
+    ta = rps
+    tt = "Req_per_second"
+
+elif test == "cps":
+    ta = cps
+    tt = "Conn_per_second"
+
+elif test == "dreq":
+    ta = dreq
+    tt = "Delta_Requests"
+
+elif test == "dcon":
+    ta = dreq
+    tt = "Delta_Conn"
+
+
 else:
     ta = ct
     tt = "CheckTime"
@@ -415,7 +572,7 @@ if output == 1:
     else:
         perfdata = "%s=%s;" % (test, ta)
 else:
-    perfdata = "ac=%s;acc=%s; han=%s; req=%s; err=%s; rpc=%s; read=%s; writ=%s; wait=%s; ct=%sms;"   % (ac, acc, han, req, err, rpc, read, writ, wait, ct  ) 
+    perfdata = "ac=%s;acc=%s; han=%s; req=%s; err=%s; rpc=%s; rps=%s; cps=%s; dreq=%s; dcon=%s; read=%s; writ=%s; wait=%s; ct=%sms;"   % (ac, acc, han, req, err, rpc, rps, cps, dreq, dcon, read, writ, wait, ct  ) 
 
 print_debug("perfdata: %s" % perfdata)
 
