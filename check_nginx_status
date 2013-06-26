@@ -18,7 +18,7 @@ import getopt
 import sys
 import time
 
-version = "0.2.20 - testing - 2013-06-26"
+version = "0.2.24 - testing - 2013-06-26"
 
 ### default_values
 
@@ -120,9 +120,9 @@ to monitor nginx status and alerts on various values to test for
             req     -> total requests
             rpc     -> requests per connection (req/han) 
             err     -> diff between acc - han, thus errors
-            read    -> actual reading from clients
-            writ    -> actual writing to clients
-            wait    -> actual waiting for data fro upstream
+            read    -> reading requests from clients
+            writ    -> reading request body, processes request, or writes response to a client
+            wait    -> keep-alive connections, actually it is ac - (read + writ)
             ct      -> checktime (connection time) for this check
     
     Nginx-Config
@@ -305,7 +305,6 @@ try:
     req = int(req)
     err = acc - han
     rpc = int(req/han)
-    
     l3 = status[3]
     read = int((l3.split("Reading:")[1]).split()[0])
     writ = int((l3.split("Writing:")[1]).split()[0])
@@ -323,7 +322,7 @@ print_debug("""-- status-report (perfdata)---
 active_conns    :   %s
 accepted conns  :   %s    
 handled         :   %s
-reqests         :   %s
+requests        :   %s
 accept_errors   :   %s
 req per conn    : %s
 reading         :   %s

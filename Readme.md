@@ -17,7 +17,8 @@ execute $check_plugin -h
  - [download zip](https://bitbucket.org/maresystem/dogtown-nagios-plugins/get/master.zip)
 
 ~~~
-    git clone https://bitbucket.org/maresystem/linux-docu.git
+
+    git clone git clone https://bitbucket.org/maresystem/dogtown-nagios-plugins.git
     
     wget -O dogtown-nagios-plugins.tar.gz https://bitbucket.org/maresystem/dogtown-nagios-plugins/get/master.tar.gz
     
