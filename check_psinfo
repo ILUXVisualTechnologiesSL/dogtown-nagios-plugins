@@ -91,135 +91,146 @@ check_psinfo
     might need to be executed using sudo; see config-examples in the header
     of this plugin/script
     
-    USAGE
-     check_psinfo -t [type] [options]
+USAGE
+    check_psinfo -t [type] [options]
     
-    TYPES
-      -t mem    check memory 
-                -w usage in %
-                -c usage in %
-                check_psinfo -t mem -w 80 -c 90 
-                
-                -p proc_name                                    [*]
-                -w usage in mb                                  [*]
-                -c usage in mb                                  [*]
-                check_psinfo -t mem -p apache2 -w 1024 -c 2048
-                
-                you can use this to monitor / get perfdata without 
-                alerting, just skip -c / -w 
-                check_psinfo -t mem -p apache2 
+TYPES
+    -t mem    check memory 
+        -w usage in %
+        -c usage in %
+        check_psinfo -t mem -w 80 -c 90 
+        
+        -p proc_name                                    [*]
+        -w usage in mb                                  [*]
+        -c usage in mb                                  [*]
+        check_psinfo -t mem -p apache2 -w 1024 -c 2048
+        
+        you can use this to monitor / get perfdata without 
+        alerting, just skip -c / -w 
+        check_psinfo -t mem -p apache2 
 
-      -t proc   check for processes
-                -w total nr of procs                            [*]
-                -c total nr of procs                            [*]
-                -p proc_name                                    [*]
-                eg -p apache -c 150 -w 300
-                returns CRITICAL if no processes are found 
-                
-      -t cpu    check cpu_usage
-                -w X,Y,Z warn-load for 1,5,15 min avg
-                -c X,Y,Z crit-load for 1,5,15 min avg
-                
-                this might not run on systems without /proc - filesystem
-                
-                *** 
-                Please Note: this is a relative value, depending on your 
-                ammount of available processors
-                
-                
-                C > W > procs.OK < w < c 
-                
-                
-      -t net    check net-connections
-                -w [nr] warn-nr of connections                  [*]
-                -c [nr] crit-nr of connections                  [*]
-                -l [nr] localport  (tcp) ***                    [*]
-                -r [nr] remoteport (tcp) ***                    [*]
-                -p [name] proc_name                             [*]
-                
-                if yout want to check for net_conns on servers like apache
-                you need to execute this script with sudo-rights. 
-                
-                examples:
-                check_psinfo -t net -l 3306 -c 200 -w 100 
-                -> checks for active netconns on local port 3306
+    -t proc   check for processes
+        -w total nr of procs                            [*]
+        -c total nr of procs                            [*]
+        -p proc_name                                    [*]
+        eg -p apache -c 150 -w 300
+        returns CRITICAL if no processes are found 
+            
+    -t cpu    check cpu_usage
+        -w X,Y,Z warn-load for 1,5,15 min avg
+        -c X,Y,Z crit-load for 1,5,15 min avg
+        
+        this might not run on systems without /proc - filesystem
+        
+        *** 
+        Please Note: this is a relative value, depending on your 
+        ammount of available processors
+        
+        C > W > procs.OK < w < c 
+            
+            
+    -t net    check net-connections
+        -w [nr] warn-nr of connections                  [*]
+        -c [nr] crit-nr of connections                  [*]
+        -l [nr] localport  (tcp) ***                    [*]
+        -r [nr] remoteport (tcp) ***                    [*]
+        -p [name] proc_name                             [*]
+        
+        if yout want to check for net_conns on servers like apache
+        you need to execute this script with sudo-rights. 
+        
+        examples:
+        check_psinfo -t net -l 3306 -c 200 -w 100 
+        -> checks for active netconns on local port 3306
 
-                check_psinfo -t net -p apache2 -c 300 -w 200 
-                -> checks for active netconns for a process with name apache2
-                
-                check_psinfo -t net -r 5432 -c 200 -w 100 
-                -> checks for active netconns to remote port 5432                
+        check_psinfo -t net -p apache2 -c 300 -w 200 
+        -> checks for active netconns for a process with name apache2
+        
+        check_psinfo -t net -r 5432 -c 200 -w 100 
+        -> checks for active netconns to remote port 5432                
 
-      -t nio    check for certain network-io-stats; if no -e is given, 
-                all stats will be returned, but -w/-c might not be used
-                -n if   give interface-name like eth0/lo etc;   [*]
-                        default: stats ffor all interfaces
-                -e val  check for error-val and might be:       [*]
-                        - bsent   / number of bytes sent
-                        - brecv   / number of bytes received
-                        - psent   / number of packets sent
-                        - precv   / number of packets received
-                        - errin   / total number of errors while receiving
-                        - errout  / total number of errors while sending
-                        - dropin  / total number of incoming packets which 
-                                    were dropped   
-                        - droput  / total number of outgoing packets which 
-                                    were dropped (always 0 on OSX and BSD)
-                -w [nr] warn-nr of errors                       [*]
-                -c [nr] crit-nr of errors                       [*]
-                
-                examples:
-                
-                check_psinfo -t nio -n eth0 
-                -> checks for interface-stats @ eth0, used to collect
-                perf_data
-                
-                check_psinfo -t nio -n eth0 -e errin -w 10 -c 1000
-                -> checks for incoming error-stats @ eth0 and alerts
-                on given values
-                
-                ***
+    -t nio    check for certain network-io-stats; if no -e is given, 
+        all stats will be returned, but -w/-c might not be used
+        -n if   give interface-name like eth0/lo etc;   [*]
+                default: stats ffor all interfaces
+        -e val  check for error-val and might be:       [*]
+                - bsent   / number of bytes sent
+                - brecv   / number of bytes received
+                - psent   / number of packets sent
+                - precv   / number of packets received
+                - errin   / total number of errors while receiving
+                - errout  / total number of errors while sending
+                - dropin  / total number of incoming packets which 
+                            were dropped   
+                - droput  / total number of outgoing packets which 
+                            were dropped (always 0 on OSX and BSD)
+        -w [nr] warn-nr of errors                       [*]
+        -c [nr] crit-nr of errors                       [*]
+        
+        examples:
+        
+        check_psinfo -t nio -n eth0 
+        -> checks for interface-stats @ eth0, used to collect
+        perf_data
+        
+        check_psinfo -t nio -n eth0 -e errin -w 10 -c 1000
+        -> checks for incoming error-stats @ eth0 and alerts
+        on given values
+        
+        ***
 
-      
-      -t uptime checks the actual uptime
-                -w [days] -> warning_number of days uptime      [*]
-                -c [days] -> critical_number of days uptime     [*]
+  
+    -t uptime checks the actual uptime
+        -w [days] -> warning_number of days uptime      [*]
+        -c [days] -> critical_number of days uptime     [*]
 
-      -t users  checks for logged_in users (tested on linux)
-                -w [nr]   -> warning_number of user_logins      [*]
-                -c [nr]   -> critical_number of user_logins     [*]
+    -t users  checks for logged_in users (tested on linux)
+        -w [nr]   -> warning_number of user_logins      [*]
+        -c [nr]   -> critical_number of user_logins     [*]
 
-      -t iowait check for current iowait - status
-                -w [nr] warn-% for iowait                       [*]
-                -c [nr] crit-% for iowait                       [*]
+    -t iowait check for current iowait - status
+        -w [nr] warn-% for iowait                       [*]
+        -c [nr] crit-% for iowait                       [*]
 
-      -t iostat check for global iowait - status
-                -w [nr] warn-% for iowait                       [*]
-                -c [nr] crit-% for iowait                       [*]
-      
-      -t disk   checks for disk_free/disk_used on given path (use -p)
-                -p path give partition/path to check,           [*]
-                  default: / 
-                -w [nr] warn-% for disk_free                    [*]
-                -W [nr] warn-MB for disk_free                   [*]
-                -c [nr] crit-% for disk_free                    [*]
-                -C [nr] crit-MB for disk_free                   [*]
-                you could either use -c / -w or -C  / -W
-                ***
+    -t iostat check for global iowait - status
+        -w [nr] warn-% for iowait                       [*]
+        -c [nr] crit-% for iowait                       [*]
+  
+    -t disk   checks for disk_free/disk_used on given path (use -p)
+        -p path give partition/path to check,           [*]
+          default: / 
+        -w [nr] warn-% for disk_free                    [*]
+        -W [nr] warn-MB for disk_free                   [*]
+        -c [nr] crit-% for disk_free                    [*]
+        -C [nr] crit-MB for disk_free                   [*]
+        you could either use -c / -w or -C  / -W
+        ***
 
-      
-      -t iface  check if network_interface [ if ] is up, CRITICAL if not
-                -n if  - give interface-name like eth0 / virbr0 etc, 
-                         defaults to eth0                       [*]
-                -i ip  - check if given ip is found on that interface, 
-                         CRITICAL if not                        [*]
-                ***
-    
-    MISC Options
-      -R        suppress run_time informations
-      
-      -v        version
-      -h        help
+  
+    -t iface  check if network_interface [ if ] is up, CRITICAL if not
+        -n if  - give interface-name like eth0 / virbr0 etc, 
+                 defaults to eth0                       [*]
+        -i ip  - check if given ip is found on that interface, 
+                 CRITICAL if not                        [*]
+        ***
+
+MISC Options
+    -R        suppress run_time informations
+  
+    -v        version
+    -h        help
+
+Requirements:
+    - python 2.5 or later
+    - python-psutil-0.2.0 or later 
+       - 0.6.1 for any function
+       - 0.2.1 if you can skip -t mem / -t users
+    - please note, as of v 0.6.x of this plugin
+      it is based on psutil-0.6.x; some functions that worked
+      with psutil-0.2.x (check_psinfo v0.2-0.4) 
+    - see contrib/ or the folloqig link for ps-util-download
+      https://code.google.com/p/psutil
+
  """
     
     print """
