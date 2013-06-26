@@ -3,10 +3,9 @@
 # this plugin is inspired by yangzi2008@126.com 
 # http://exchange.nagios.org/directory/Plugins/Web-Servers/nginx/check_nginx/details
 # 
-# 
 # reimplemented by dogtown with more features
 # 
-# (c) copyright 2010,2011,2012,2013 dogtown@mare-system.de
+# (c) copyright 2012,2013 dogtown@mare-system.de
 # 
 # License: GPL v2 
 #
@@ -19,7 +18,7 @@ import getopt
 import sys
 import time
 
-version = "0.2.18 - testing - 2013-06-24"
+version = "0.2.20 - testing - 2013-06-26"
 
 ### default_values
 
@@ -69,16 +68,16 @@ to monitor nginx status and alerts on various values to test for
             if used, -w/-c is mandatory
             Default: checktime
             possible Values:
+
                 active_conn     -> active connections
                 accepts_err     -> difference between accepted and 
                                    handled requests (should be 0)
-                req_conns       -> check for requests/connection
+                requests        -> check for requests/connection
                 reading         -> actual value for reading headers
                 writing         -> value for active requests
                 waiting         -> actual keep-alive-connections
                 checktime       -> checks if this check need more than
                                    given -w/-c milliseconds 
-
                 
           --warning|-w)
             Sets a warning level for selected test(check)
@@ -98,10 +97,10 @@ to monitor nginx status and alerts on various values to test for
         
         *** ) -> please dont use this option, not implemented or not functional
 
-	Examples:
-            The url is www.example.com/status w/ login, just get perfdata
-            ./check_nginx_status -H www.example.com -u /status -u useerrr -p passswwdddd 
-
+    Examples:
+            just get perfdata, url is default (/nginx_status)
+            ./check_nginx_status -H www.example.com 
+            
             check for plugin_checktime, error > 10ms (warning) or 50ms (error)
             ./check_nginx_status -H www.example.com -u /status  -w 10 -c 50
             
@@ -110,7 +109,34 @@ to monitor nginx status and alerts on various values to test for
 
             Check for accepts_errors:
             ./check_nginx_status -H www.example.com -t accepts_err -w 1 -c 50
-            
+    
+    Performancedata:
+    
+        NginxStatus.Check OK | ac=1;acc=64; han=64; req=64; err=0; rpc=1; read=0; writ=1; wait=0; ct=6ms;
+
+            ac      -> active connections
+            acc     -> totally accepted connections
+            han     -> totally handled connections
+            req     -> total requests
+            rpc     -> requests per connection (req/han) 
+            err     -> diff between acc - han, thus errors
+            read    -> actual reading from clients
+            writ    -> actual writing to clients
+            wait    -> actual waiting for data fro upstream
+            ct      -> checktime (connection time) for this check
+    
+    Nginx-Config
+            be sure to have your nginx compiled with Status-Module
+            (--with-http_stub_status_module), you might want to test with
+            nginx -V             
+            http://wiki.nginx.org/HttpStubStatusModule
+
+        location /nginx_status {
+            stub_status on;
+            access_log   off;
+            allow 127.0.0.1;
+            deny all;
+        }
     
     Docs & Download:
 
@@ -278,6 +304,7 @@ try:
     han = int(han)
     req = int(req)
     err = acc - han
+    rpc = int(req/han)
     
     l3 = status[3]
     read = int((l3.split("Reading:")[1]).split()[0])
@@ -298,15 +325,16 @@ accepted conns  :   %s
 handled         :   %s
 reqests         :   %s
 accept_errors   :   %s
+req per conn    : %s
 reading         :   %s
 writing         :   %s
 waiting         :   %s
 
 checktime       :   %s ms
 
-""" % (ac, acc, han, req, err, read, writ, wait, ct  )) 
+""" % (ac, acc, han, req, err, rpc, read, writ, wait, ct  )) 
 
-perfdata = "ac=%s;acc=%s; han=%s; req=%s; err=%s; read=%s; writ=%s; wait=%s; ct=%sms;"   % (ac, acc, han, req, err, read, writ, wait, ct  ) 
+perfdata = "ac=%s;acc=%s; han=%s; req=%s; err=%s; rpc=%s; read=%s; writ=%s; wait=%s; ct=%sms;"   % (ac, acc, han, req, err, rpc, read, writ, wait, ct  ) 
 
 print_debug("perfdata: %s" % perfdata)
 
@@ -339,13 +367,10 @@ elif test == "accepts_err":
     ta = err
     tt = "AcceptErrors"
 
-elif test == "req_conns":
+elif test == "requests":
     ta = req
     tt = "Requests/Connection"
 
-elif test == "req_conns":
-    ta = req
-    tt = "Requests/Connection"
 
 elif test == "reading":
     ta = read
