@@ -1,12 +1,27 @@
 # Dogtown-Nagios-Plugins 
 
-(c) copyright 2009-2013 dogtown@mare-system.de
+(c) copyright 2008-2013 dogtown@mare-system.de
 
-these plugins are developed and tested using Debian and SLES
+these plugins are developed and tested using Debian, SLES
 and RedHat but should work on any modern Unix.
 
 for more help see $check_plugin.Readme, if available, or 
 execute $check_plugin -h 
+
+# Included Plugins
+
+- check_psinfo - get all kinds of processinfo like cpu/mem/running procs - info, net_conns etc
+- check_nginx_status - extract and monitor values from nginx_status_page
+- check_mdstat - check status on linux softraid, also alerts on autmated rebuilds
+- check_selenium - extract runtime/status-values from selenium-tests
+
+
+## obsolete / not maintained anymore
+
+- check_snort - extract and monitor values from snort-databases
+- check_filkeck - yet another file/dircheck-plugin
+- check_nmap - monitor nmap - runs against hosts/networks (if yout think this plugin/functionality
+  is usefull you might want to check [Dr. Portscan](https://git.lrz.de/?p=DrPortScan.git)
 
 
 # Installation
@@ -18,7 +33,7 @@ execute $check_plugin -h
 
 ~~~
 
-    git clone git clone https://bitbucket.org/maresystem/dogtown-nagios-plugins.git
+    git clone https://bitbucket.org/maresystem/dogtown-nagios-plugins.git
     
     wget -O dogtown-nagios-plugins.tar.gz https://bitbucket.org/maresystem/dogtown-nagios-plugins/get/master.tar.gz
     
@@ -28,6 +43,7 @@ execute $check_plugin -h
 - copy plugins to your local nagios-plugins-dir
 - find infos / help in check_plugin.Readme or execute 
 ~~~ check_plugin -h ~~~
+
 - config-examples might be found in the header of each plugin
 - test / run them through nrpe or locally
 
