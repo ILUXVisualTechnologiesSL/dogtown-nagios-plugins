@@ -9,7 +9,7 @@
 # 
 # License: GPL v2 
 #
-# dload: https://bitbucket.org/maresystem/dogtown-nagios-plugins/src
+# dload: https://bitbucket.org/maresystem/dogtown-nagios-plugins
 #
 
 import string
@@ -18,7 +18,7 @@ import getopt
 import sys
 import time
 
-version = "0.2.24 - testing - 2013-06-26"
+version = "0.2.28 - testing - 2013-06-26"
 
 ### default_values
 
@@ -36,6 +36,7 @@ to monitor nginx status and alerts on various values to test for
 
    check_nginx_status [-H|--HOST][-p|--port][-u|--url][-a|--auth][-s|--ssl]
                       [-t|--test][-w|--warning][-c|--critical]
+                      [-o|--output]
                       [-h|--help][-v|--version][-d|--debug]
 
    Options:
@@ -69,7 +70,7 @@ to monitor nginx status and alerts on various values to test for
             Default: checktime
             possible Values:
 
-                active_conn     -> active connections
+                active_conns    -> active connections
                 accepts_err     -> difference between accepted and 
                                    handled requests (should be 0)
                 requests        -> check for requests/connection
@@ -95,19 +96,28 @@ to monitor nginx status and alerts on various values to test for
           --version|-v)
             display version and exit
         
+          --output|-o)
+            output only values from selected tests in perfdata; if used w/out -t
+            the check returns the value for active connections
+             
+        
         *** ) -> please dont use this option, not implemented or not functional
 
     Examples:
-            just get perfdata, url is default (/nginx_status)
+            just get all perfdata, url is default (/nginx_status)
             ./check_nginx_status -H www.example.com 
+
+            just get active connections perfdata
+            ./check_nginx_status -H www.example.com -o 
             
-            check for plugin_checktime, error > 10ms (warning) or 50ms (error)
-            ./check_nginx_status -H www.example.com -u /status  -w 10 -c 50
+            check for plugin_checktime, error > 10ms (warning) or 50ms (error) and output
+            only perfdata for that values
+            ./check_nginx_status -H www.example.com -u /status  -w 10 -c 50 -o
             
             check for active connections, alert on > 500/2000 active connections
             ./check_nginx_status -H www.example.com -u /status -t active_conn -w 500 -c 2000
 
-            Check for accepts_errors:
+            Check for accepts_errors
             ./check_nginx_status -H www.example.com -t accepts_err -w 1 -c 50
     
     Performancedata:
@@ -167,6 +177,7 @@ ssl = 0
 debug = 0
 test = 0
 w = c = 0
+output = 0
 user = passwd = 0
 msg = "CheckNginx - UNKNOWN"
 perfdata = ""
@@ -185,7 +196,7 @@ usage: check_nginx_status -h
     
 
 try:
-    options,args = getopt.getopt(sys.argv[1:],"dvDshH:p:u:p:w:c:t:",["help","SSL","Debug","HOST=","Port=","Auth=","Test=","Url=","passwd=","warning=","critical="])
+    options,args = getopt.getopt(sys.argv[1:],"dovDshH:p:u:p:w:c:t:",["help","SSL","Debug","HOST=","Port=","Auth=","Test=","Url=","passwd=","warning=","critical=", "output"])
 
 except getopt.GetoptError:
     usage()
@@ -199,17 +210,26 @@ for name,value in options:
 
     if name in ("-H","--HOST"):
         host = "%s" % value
-    elif name in ("-u","--Url"):
+
+    elif name in ("-u","--url"):
         url = value
-    elif name in ("-a","--Auth"):
+
+    elif name in ("-a","--auth"):
         user, passwd = value.split(":")
-    elif name in ("-s","--SSL"):
+
+    elif name in ("-s","--ssl"):
         ssl = 1
-    elif name in ("-t","--Test"):
+
+    elif name in ("-t","--test"):
         test = "%s" % value 
-    elif name in ("-d","--Debug"):
+
+    elif name in ("-d","--debug"):
         debug = 1
-    elif name in ("-p","--Port"):
+
+    elif name in ("-o","--output"):
+        output = 1
+
+    elif name in ("-p","--port"):
         try:
             port = int(value)
         except:
@@ -333,16 +353,12 @@ checktime       :   %s ms
 
 """ % (ac, acc, han, req, err, rpc, read, writ, wait, ct  )) 
 
-perfdata = "ac=%s;acc=%s; han=%s; req=%s; err=%s; rpc=%s; read=%s; writ=%s; wait=%s; ct=%sms;"   % (ac, acc, han, req, err, rpc, read, writ, wait, ct  ) 
 
-print_debug("perfdata: %s" % perfdata)
-
-
-if test == 0:
-    if w == 0 or c == 0:
-        pass
-    else:
-        test = "checktime"
+#~ if test == 0:
+    #~ if w == 0 or c == 0:
+        #~ pass
+    #~ else:
+        #~ test = "checktime"
 
 if test != 0:
     if w == 0:
@@ -358,8 +374,9 @@ tt = "unknown"
 
 # checking which test to perform
 if test == 0:
+    ta = ac
     tt = "Check"
-elif test == "active_conn":
+elif test == "active_conns":
     ta = ac
     tt = "ActiveConnections"
 elif test == "accepts_err":
@@ -388,11 +405,23 @@ else:
     tt = "CheckTime"
     
 print_debug("set test: %s" % tt)
-
 dt = "NginxStatus.%s" % tt
 
+
+# creating perfdata
+if output == 1:
+    if test == 0:
+        perfdata="active_conns=%s;" % ta
+    else:
+        perfdata = "%s=%s;" % (test, ta)
+else:
+    perfdata = "ac=%s;acc=%s; han=%s; req=%s; err=%s; rpc=%s; read=%s; writ=%s; wait=%s; ct=%sms;"   % (ac, acc, han, req, err, rpc, read, writ, wait, ct  ) 
+
+print_debug("perfdata: %s" % perfdata)
+
+
 if test == 0:
-    print "%s OK | %s" % (dt, perfdata)
+    print "%s OK [ %s ] | %s" % (dt, ta,  perfdata)
     sys.exit(0)
 
 if ta >= c:
@@ -404,7 +433,7 @@ elif ta >= w:
     sys.exit(1)
 
 else:
-    print "%s OK | %s" % (dt, perfdata)
+    print "%s OK [ %s ] | %s" % (dt, ta, perfdata)
     
 
 
