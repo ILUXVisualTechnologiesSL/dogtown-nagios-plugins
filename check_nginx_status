@@ -18,10 +18,15 @@
 #
 # reimplemented by dogtown with more features
 # 
+# TODO:
+#   - make -a work
+#   - make -t test1,test2,test available w/ -w 1,2,3 -c 1,2,3
+#
+#
 
 import string, urllib2, getopt, sys, time, os
 
-version = "0.2.34 - testing - 2013-06-26"
+version = "0.3.0.45 - rc-1 - 2013-06-26"
 
 ### default_values
 
@@ -108,7 +113,10 @@ to monitor nginx status and alerts on various values to test for
                 between the latest and the current check; time is 
                 extracted from the timestamp of the result_file
                 
-                to disable this option (no files ar written) use -n
+                to disable calculation (no files are written) use -n; 
+                you cannot use -t [rps,cps,dreq,dcon] with -n; this
+                will raise an error and the plugin returns UNKNOWN
+
                 see -r - option for an alternate filepath
                 
           --warning|-w)
@@ -172,12 +180,12 @@ to monitor nginx status and alerts on various values to test for
             acc     -> totally accepted connections
             han     -> totally handled connections
             req     -> total requests
-            rpc     -> requests per connection (req/han) 
-            rps     -> requests per second (calculated) from last checkrun to this
-            cps     -> connections per (calculated) from last checkrun to this
-            dreq    -> request-delta from last checkrun to this 
-            dcon    -> accepted-connection-delta from last checkrun to this 
             err     -> diff between acc - han, thus errors
+            rpc     -> requests per connection (req/han) 
+            rps     -> requests per second (calculated) from last checkrun vs actual values
+            cps     -> connections per (calculated) from last checkrun vs actual values
+            dreq    -> request-delta from last checkrun vs actual values
+            dcon    -> accepted-connection-delta from last checkrun vs actual values 
             read    -> reading requests from clients
             writ    -> reading request body, processes request, or writes response to a client
             wait    -> keep-alive connections, actually it is ac - (read + writ)
@@ -187,8 +195,8 @@ to monitor nginx status and alerts on various values to test for
     
     Nginx-Config
             be sure to have your nginx compiled with Status-Module
-            (--with-http_stub_status_module), you might want to test with
-            nginx -V             
+            (--with-http_stub_status_module), you might want to test 
+            your installation with nginx -V             
             http://wiki.nginx.org/HttpStubStatusModule
 
         location /nginx_status {
@@ -197,6 +205,14 @@ to monitor nginx status and alerts on various values to test for
             allow 127.0.0.1;
             deny all;
         }
+        
+    Requirements:
+
+        nginx compiled with HttpStubStatusModule (see Nginx-Config)
+
+        python 2.x
+        this plugin is not yet compatible with python 3.x, but it should be
+        easy to convert, using 2to3
     
     Docs & Download:
 
