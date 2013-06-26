@@ -21,7 +21,7 @@
 
 import string, urllib2, getopt, sys, time, os
 
-version = "0.2.32 - testing - 2013-06-26"
+version = "0.2.34 - testing - 2013-06-26"
 
 ### default_values
 
@@ -258,7 +258,14 @@ def calculate():
                 #return(rps, cps, dreq, dcon)
             
             
-            
+    else:
+        
+        if test in ("rps", "cps", "dreq", "dcon"):
+            print "NginxStatus.%s UNKNONW - noresult selected (-n), cannot calculate test_results" % (test)
+            sys.exit(3)
+        
+        print_debug("noresult selected, return 0_values")
+        return(rps, cps, dreq, dcon)
             
 
     print_debug("writing result_file -> %s" % result_file)
@@ -315,15 +322,11 @@ usage: check_nginx_status -h
     
 
 try:
-    options,args = getopt.getopt(sys.argv[1:],"dovDshH:p:u:p:w:c:t:r:",["help","SSL","Debug","HOST","port","auth","test","url","warning","critical=", "output", "resultfile"])
+    options,args = getopt.getopt(sys.argv[1:],"ndovDshH:p:u:p:w:c:t:r:",["help","SSL","Debug","HOST","port","auth","test","url","warning","critical", "output", "resultfile", "noresult"])
 
 except getopt.GetoptError:
     usage()
     sys.exit(3)
-
-
-
-
 
 for name,value in options:
 
