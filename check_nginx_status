@@ -26,7 +26,7 @@
 
 import string, urllib2, getopt, sys, time, os
 
-version = "0.3.0.45 - rc-1 - 2013-06-26"
+version = "0.3.0.48 - rc-2 - 2013-07-02"
 
 ### default_values
 
@@ -50,173 +50,180 @@ result_file = "/tmp/check_nginx.results"
 
 def usage():
    print """
+   
+check_nginx_status is a Nagios-Plugin
+to monitor nginx status and alerts on various values, 
+based on teh output from HttpStubStatus - Module
 
-check_nginx_status is a Nagios-Plugin 
-to monitor nginx status and alerts on various values to test for
-
-   Usage:
-
-   check_nginx_status [-H|--HOST] [-p|--port] [-u|--url] [-a|--auth] [-s|--ssl]
-                      [-t|--test] [-w|--warning] [-c|--critical]
-                      [-o|--output] [-r|--resultfile]
-                      [-h|--help] [-v|--version] [-d|--debug]
+it also creates, based on the returned values, a csv to store data
 
 
-   Options:
-          --help|-h)
-            print check_nginx_status help
-            
-          --HOST|-H)
-            Sets nginx host
-            Default: localhost
-          
-          --port|-p)
-            Sets connection-port 
-            Default: 80/http, 443/https
-          
-          --ssl|-s)
-            Turns on SSL
-            Default: off
-          
-          --url|-u)
-            Sets nginx status url path. 
-            Default: /nginx_status
-          
-          --auth|-a)
-            Sets nginx status BasicAuth user:password. 
-            Default: off
-            ***
-          
-          --test|-t)
-            Sets the test(check)_value for w/c
-            if used, -w/-c is mandatory
-            Default: checktime
-            possible Values:
+Usage:
 
-                active_conns    -> active connections
-                accepts_err     -> difference between accepted and 
-                                   handled requests (should be 0)
-                requests        -> check for requests/connection
-                reading         -> actual value for reading headers
-                writing         -> value for active requests
-                waiting         -> actual keep-alive-connections
-                checktime       -> checks if this check need more than
-                                   given -w/-c milliseconds 
-                
-            --calculated checks ---------------
-                rps             -> requests per seconds
-                cps             -> connections per second
-                dreq            -> delta requests to the previous one
-                dcon            -> delta connections to the previous one
-                
-                these checks are calculated at runtime with a timeframe 
-                between the latest and the current check; time is 
-                extracted from the timestamp of the result_file
-                
-                to disable calculation (no files are written) use -n; 
-                you cannot use -t [rps,cps,dreq,dcon] with -n; this
-                will raise an error and the plugin returns UNKNOWN
+    check_nginx_status [-H|--HOST] [-p|--port] [-u|--url] [-a|--auth] [-s|--ssl]
+                       [-t|--test] [-w|--warning] [-c|--critical]
+                       [-o|--output] [-r|--resultfile][-n|--noresult]
+                       [-h|--help] [-v|--version] [-d|--debug]
 
-                see -r - option for an alternate filepath
-                
-          --warning|-w)
-            Sets a warning level for selected test(check)
-            Default: off
-          
-          --critical|-c)
-            Sets a critical level for selected test(check)
-            Default: off
-            
-          --debug|-d)
-            turn on debugging - messages (use this for manual testing, 
-            never via nagios-checks; beware of the messy output
-            Default: off 
-            
-          --version|-v)
-            display version and exit
+
+Options:
+
+  --help|-h)
+    print check_nginx_status help
+
+  --HOST|-H)
+    Sets nginx host
+    Default: localhost
+  
+  --port|-p)
+    Sets connection-port 
+    Default: 80/http, 443/https
+  
+  --ssl|-s)
+    Turns on SSL
+    Default: off
+  
+  --url|-u)
+    Sets nginx status url path. 
+    Default: /nginx_status
+  
+  --auth|-a)
+    Sets nginx status BasicAuth user:password. 
+    Default: off
+    ***
+  
+  --test|-t)
+    Sets the test(check)_value for w/c
+    if used, -w/-c is mandatory
+    Default: checktime
+    possible Values:
+
+        active_conns    -> active connections
+        accepts_err     -> difference between accepted and 
+                           handled requests (should be 0)
+        requests        -> check for requests/connection
+        reading         -> actual value for reading headers
+        writing         -> value for active requests
+        waiting         -> actual keep-alive-connections
+        checktime       -> checks if this check need more than
+                           given -w/-c milliseconds 
         
-          --output|-o)
-            output only values from selected tests in perfdata; if used w/out -t
-            the check returns the value for active connections
+    --calculated checks ---------------
+        rps             -> requests per seconds
+        cps             -> connections per second
+        dreq            -> delta requests to the previous one
+        dcon            -> delta connections to the previous one
         
-          --resultfile|-r)
-            /path/to/check_nginx.results{.csv}
-            please note, beside the values from the actual check 
-            (eg.g check_nginx.results) a second
-            file is created, if not existent, and written on each plugin-run
-            (check_nginx.results.csv), containign a historic view on all 
-            extracted values
-            default: /tmp/check_nginx.results{.csv}
-
-          --noresult|-n)
-            never write a results-file; CANNOT be used with calculated checks 
-            -t [rps|cps|dreq|dcon] 
-            default: off 
+        these checks are calculated at runtime with a timeframe 
+        between the latest and the current check; time is 
+        extracted from the timestamp of the result_file
         
-        *** ) -> please dont use this option, not implemented or not functional
+        to disable calculation (no files are written) use -n; 
+        you cannot use -t [rps,cps,dreq,dcon] with -n; this
+        will raise an error and the plugin returns UNKNOWN
 
-    Examples:
-            just get all perfdata, url is default (/nginx_status)
-            ./check_nginx_status --HOST www.example.com 
-
-            just get active connections perfdata
-            ./check_nginx_status -H www.example.com -o 
-            
-            check for plugin_checktime, error > 10ms (warning) or 50ms (error) and output
-            only perfdata for that values
-            ./check_nginx_status -H www.example.com -u /status  -w 10 -c 50 -o
-            
-            check for active connections, alert on > 500/2000 active connections
-            ./check_nginx_status -H www.example.com -u /status -t active_conn -w 500 -c 2000
-
-            Check for accepts_errors
-            ./check_nginx_status -H www.example.com -t accepts_err -w 1 -c 50
-    
-    Performancedata:
-    
-        NginxStatus.Check OK | ac=1;acc=64; han=64; req=64; err=0; rpc=1; read=0; writ=1; wait=0; ct=6ms;
-
-            ac      -> active connections
-            acc     -> totally accepted connections
-            han     -> totally handled connections
-            req     -> total requests
-            err     -> diff between acc - han, thus errors
-            rpc     -> requests per connection (req/han) 
-            rps     -> requests per second (calculated) from last checkrun vs actual values
-            cps     -> connections per (calculated) from last checkrun vs actual values
-            dreq    -> request-delta from last checkrun vs actual values
-            dcon    -> accepted-connection-delta from last checkrun vs actual values 
-            read    -> reading requests from clients
-            writ    -> reading request body, processes request, or writes response to a client
-            wait    -> keep-alive connections, actually it is ac - (read + writ)
-            ct      -> checktime (connection time) for this check
-    
-        rpc/rps/dreq/dcon are always set to 0 if -n is used
-    
-    Nginx-Config
-            be sure to have your nginx compiled with Status-Module
-            (--with-http_stub_status_module), you might want to test 
-            your installation with nginx -V             
-            http://wiki.nginx.org/HttpStubStatusModule
-
-        location /nginx_status {
-            stub_status on;
-            access_log   off;
-            allow 127.0.0.1;
-            deny all;
-        }
+        see -r - option for an alternate filepath for temporary results
         
-    Requirements:
-
-        nginx compiled with HttpStubStatusModule (see Nginx-Config)
-
-        python 2.x
-        this plugin is not yet compatible with python 3.x, but it should be
-        easy to convert, using 2to3
+  --warning|-w)
+    Sets a warning level for selected test(check)
+    Default: off
+  
+  --critical|-c)
+    Sets a critical level for selected test(check)
+    Default: off
     
-    Docs & Download:
+  --debug|-d)
+    turn on debugging - messages (use this for manual testing, 
+    never via nagios-checks; beware of the messy output
+    Default: off 
+    
+  --version|-v)
+    display version and exit
 
-            https://bitbucket.org/maresystem/dogtown-nagios-plugins
+  --output|-o)
+    output only values from selected tests in perfdata; if used w/out -t
+    the check returns the value for active connections
+
+  --resultfile|-r)
+    /path/to/check_nginx.results{.csv}
+    please note, beside the values from the actual check 
+    (eg.g check_nginx.results) a second
+    file is created, if not existent, and written on each plugin-run
+    (check_nginx.results.csv), containign a historic view on all 
+    extracted values
+    default: /tmp/check_nginx.results{.csv}
+
+  --noresult|-n)
+    never write a results-file; CANNOT be used with calculated checks 
+    -t [rps|cps|dreq|dcon] 
+    default: off 
+    
+    *** ) -> please dont use this option, not implemented or not functional
+
+Examples:
+
+    just get all perfdata, url is default (/nginx_status)
+    ./check_nginx_status --HOST www.example.com 
+
+    just get active connections perfdata
+    ./check_nginx_status -H www.example.com -o 
+    
+    check for plugin_checktime, error > 10ms (warning) or 50ms (error) and output
+    only perfdata for that values
+    ./check_nginx_status -H www.example.com -u /status  -w 10 -c 50 -o
+    
+    check for active connections, alert on > 500/2000 active connections
+    ./check_nginx_status -H www.example.com -u /status -t active_conn -w 500 -c 2000
+
+    Check for accepts_errors
+    ./check_nginx_status -H www.example.com -t accepts_err -w 1 -c 50
+
+Performancedata:
+    
+    NginxStatus.Check OK | ac=1;acc=64; han=64; req=64; err=0; rpc=1; rps=0; cps=0; dreq=1; dcon=1; read=0; writ=1; wait=0; ct=6ms;
+
+        ac      -> active connections
+        acc     -> totally accepted connections
+        han     -> totally handled connections
+        req     -> total requests
+        err     -> diff between acc - han, thus errors
+        rpc     -> requests per connection (req/han) 
+        rps     -> requests per second (calculated) from last checkrun vs actual values
+        cps     -> connections per (calculated) from last checkrun vs actual values
+        dreq    -> request-delta from last checkrun vs actual values
+        dcon    -> accepted-connection-delta from last checkrun vs actual values 
+        read    -> reading requests from clients
+        writ    -> reading request body, processes request, or writes response to a client
+        wait    -> keep-alive connections, actually it is ac - (read + writ)
+        ct      -> checktime (connection time) for this check
+
+    rpc/rps/dreq/dcon are always set to 0 if -n is used
+
+Nginx-Config
+    be sure to have your nginx compiled with Status-Module
+    (--with-http_stub_status_module), you might want to test 
+    your installation with nginx -V             
+    http://wiki.nginx.org/HttpStubStatusModule
+
+    location /nginx_status {
+        stub_status on;
+        access_log   off;
+        allow 127.0.0.1;
+        deny all;
+    }
+
+    
+Requirements:
+
+    nginx compiled with HttpStubStatusModule (see Nginx-Config)
+
+    python 2.x
+    this plugin is not yet compatible with python 3.x, 
+    but should be converted easily, using 2to3
+
+Docs & Download:
+
+        https://bitbucket.org/maresystem/dogtown-nagios-plugins
     
             """
 
