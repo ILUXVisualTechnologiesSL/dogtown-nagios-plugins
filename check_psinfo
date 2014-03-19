@@ -43,7 +43,8 @@
 #command[nrpe_check_ps_nio_if]=/etc/nagios/plugins/check_psinfo -t nio -n "$ARG1$"
 #command[nrpe_check_ps_nio_if_val]=/etc/nagios/plugins/check_psinfo -t nio -n "$ARG1$" -e "$ARG2"
 #command[nrpe_check_ps_nio_if_val_limits]=/etc/nagios/plugins/check_psinfo -t nio -n "$ARG1$" -e "$ARG2" -w "$ARG3" -c "$ARG4" 
-#command[nrpe_check_ps_ebury_rootkit]=sudo /etc/nagios/plugins/check_psinfo -t ebury_rootkit
+#command[nrpe_check_ps_ebury_rootkit]=sudo /etc/nagios/plugins/check_psinfo -t ebury [-e [lazy|strict|ebury] -p [debian|redhat|sles]]
+
 #
 # SERVICES_CONFIG
 # define  service {
@@ -66,7 +67,7 @@
 #
 
 #
-version = "0.6.0.11.r87 - rc2 - 2014-02-11"
+version = "0.6.0.16.r87 - rc2 - 2014-03-11"
 
 
 import psutil as ps
@@ -214,7 +215,7 @@ TYPES
             if omitted, no package-check is done
             if package-checks fails due to missing binary (debsums)
             or package-verify-errors, alsways produces critical
-        -u  [user] www-user; defualts to www-data, if not given
+        -u  [user] www-user; defaults to www-data, if not given
             checks shmem for given user
         -e  [lazy|strict|ebury] - shmem-check: 
             lazy: shmem is allowed, no check anyway
@@ -223,10 +224,19 @@ TYPES
                     is ised
             ebury: check for ebury-variant only (perm: 666), skip check
                    for cdork (perm 600)
-
+            default: ebury
+                   
+        this check should be invoked using sudo and might have a certain FP-rate
+        
+        Known FP-Triggers:
+          - postgres
+          - encrypted drives
+          - suphp
+                  
         more infos: 
         see https://www.cert-bund.de/ebury-faq
             http://isc.sans.edu/diary/SSHD+rootkit+in+the+wild/15229
+            https://github.com/eset/malware-ioc/tree/master/windigo
             
   
     -t iface  check if network_interface [ if ] is up, CRITICAL if not
@@ -573,7 +583,7 @@ def psinfo_ebury():
               return_status="WARNING"
               return_exit=1
               return_text="shmem-check failed"
-        if nio != "ebury":
+        if nio == "strict":
           if perm == 600:
             return_perfdata += "shmem.cdork.shared: %s," % (l)
             if byte > 3000000:
