@@ -1,6 +1,6 @@
 # Dogtown-Nagios-Plugins 
 
-(c) copyright 2008-2013 dogtown@mare-system.de
+(c) copyright 2008-2014 dogtown@mare-system.de
 
 these plugins are developed and tested using Debian, SLES
 and RedHat but should work on any modern Unix.
@@ -50,7 +50,7 @@ execute $check_plugin -h
 # Requirements 
 
 these plugins are either bash-based shellscripts or python-scripts
-and should work on python 2.4-2.x (but havent been tested
+and should work on python 2.5-2.x (but havent been tested
 on python 3.x) and are well-tested on linux (mainly debian, sles and 
 redhat)
 
