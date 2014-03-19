@@ -2,7 +2,7 @@
 #
 # check_psinfo - processinformations with perfdata
 #
-# (c) copyright 2010,2011,2012,2013 dogtown@mare-system.de
+# (c) copyright 2010,2011,2012,2013,2014 dogtown@mare-system.de
 #
 # dload: https://bitbucket.org/maresystem/dogtown-nagios-plugins/src
 #
@@ -43,6 +43,7 @@
 #command[nrpe_check_ps_nio_if]=/etc/nagios/plugins/check_psinfo -t nio -n "$ARG1$"
 #command[nrpe_check_ps_nio_if_val]=/etc/nagios/plugins/check_psinfo -t nio -n "$ARG1$" -e "$ARG2"
 #command[nrpe_check_ps_nio_if_val_limits]=/etc/nagios/plugins/check_psinfo -t nio -n "$ARG1$" -e "$ARG2" -w "$ARG3" -c "$ARG4" 
+#command[nrpe_check_ps_ebury_rootkit]=sudo /etc/nagios/plugins/check_psinfo -t ebury_rootkit
 #
 # SERVICES_CONFIG
 # define  service {
@@ -65,7 +66,7 @@
 #
 
 #
-version = "0.6.0.10.r47 - rc1 - 2013-01-19"
+version = "0.6.0.11.r87 - rc2 - 2014-02-11"
 
 
 import psutil as ps
@@ -73,6 +74,7 @@ import getopt, sys, time, os, string, socket
 import fcntl, struct
 import subprocess as sub
 
+debug = "no"
 ctype = "none"
 return_status="UNKNOWN"
 return_exit=3
@@ -206,6 +208,21 @@ TYPES
         you could either use -c / -w or -C  / -W
         ***
 
+    - t ebury -> checks for signs of the ebury rootkit using ipcs
+        -p  [debian|redhat] system for package -   [*] 
+            verification (debsums / rpm -V)
+            if omitted, no package-check is done
+            if package-checks fails due to missing binary (debsums)
+            or package-verify-errors, alsways produces critical
+        -u  [user] www-user; defualts to www-data, if not given
+            checks shmem for given user
+        -e  [lazy|strict] - shmem-check: lazy, shmem is allowed
+            defaults to strict
+
+        more infos: 
+        see https://www.cert-bund.de/ebury-faq
+            http://isc.sans.edu/diary/SSHD+rootkit+in+the+wild/15229
+            
   
     -t iface  check if network_interface [ if ] is up, CRITICAL if not
         -n if  - give interface-name like eth0 / virbr0 etc, 
@@ -217,6 +234,7 @@ TYPES
 MISC Options
     -R        suppress run_time informations
   
+    -d        debug
     -v        version
     -h        help
 
@@ -272,6 +290,10 @@ def psinfo_cpu():
     return_perfdata="none"
     return_result()
 
+
+def print_debug(txt):
+  if debug == "yes":
+    print "[d] - %s" % txt
 
 
 def psinfo_uptime():
@@ -475,7 +497,81 @@ def psinfo_nio(action="all", iface="all"):
     return_exit=0
     return_result()
     
+def psinfo_ebury():
+  """
+  psinfo_ebury - checks for signs of ebury - 
+  """
+  global return_status, return_text, return_perfdata, return_exit
+
+
+  return_status="OK"
+  return_exit=0
+  return_text="nothing suspicious found"
+  return_perfdata = "ebury_checks: "
+
+  # checking for packages
+  
+  pkg = pv
+  if pkg == "debian":
+    pkg_verify = "debsums"
+    pkgs = ["openssh-server", "openssh-client", "openssh-server:i386"]
+  elif pkg == "redhat":
+    pkg_verify = "rpm -V"
+    pkgs = ["openssh", "openssh-clients", "openssh-server"]
+
+  else:
+    print_debug("skipping pkg-verify") 
+    pkg_verify = "/bin/true"
+    pkgs = []
+  
+  print_debug("package-system: %s - %s" % (pkg, pkg_verify)) 
+  
+  for pack in pkgs:
+    res = os.popen("%s %s" %  ( pkg_verify, pack)).readlines()
+    if res != 0:
+      print_debug(" > package-error in: %s" % pack)
+      return_status="CRITICAL"
+      return_exit=2
+      return_text="package verify error"
+      return_perfdata += "pckg.error: %s, " % (pack)
+
+  # checking shmem
+  
+  if nio == "lazy":
+    print_debug("lazy.skipping strict shmem-check") 
+  else:
+    shmem = os.popen("ipcs -m | tail -n +4").readlines()
+    if len(shmem) > 0:
+      if return_status == "OK":
+        return_status="WARNING"
+        return_exit=1
+        return_text="shmem-check failed"
         
+      return_perfdata += "shmem-entries: %s, " % (len(shmem))
+      print_debug("shmem: %s" % "\n".join(shmem))
+      
+      for l in shmem:
+        v = l.split()
+        try:
+          perm = int(v[3])
+          byte = int(v[4])
+        except:
+          print_debug(l)
+        if perm == 666:
+          return_perfdata += "shmem.shared: %s," % (l)
+          if byte > 3000000:
+            return_status="CRITICAL"
+            return_exit=2
+            return_text="shmem-check failed"
+          else:
+            if return_status == "OK":
+              return_status="WARNING"
+              return_exit=1
+              return_text="shmem-check failed"
+  return_result()
+
+  
+  
 
 def psinfo_net():
     """
@@ -1003,9 +1099,11 @@ ifd     = "eth0"
 nio     = "all"
 iface   = "all"
 rtime   = "yes"    
+shmem_check_user = "www-data"
+
 
 try:
-    opts, args = getopt.getopt(sys.argv[1:], "s:c:w:t:p:l:r:i:n:e:hdzvR", 
+    opts, args = getopt.getopt(sys.argv[1:], "s:c:w:t:p:l:r:i:n:e:u:hdzvR", 
         ["help", "script", "debug" ])
 except getopt.GetoptError, err:
     # print help information and exit:
@@ -1032,6 +1130,9 @@ for o, a in opts:
 
     elif o == "-e":
         nio = "%s" % a
+
+    elif o == "-u":
+        shmem_check_user = "%s" % a
     
     elif o == "-d":
         debug = "yes"
@@ -1117,6 +1218,10 @@ elif ctype == "iostat":
 
 elif ctype == "iface":
     psinfo_iface(ifd)
+    return_result()
+
+elif ctype == "ebury":
+    psinfo_ebury()
     return_result()
 
 else:
