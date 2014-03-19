@@ -12,10 +12,11 @@
 #
 # Requirements:
 #    - python 2.5 or later
+#    - python 2.7 or later for -t ebury
 #    - python-psutil-0.2.0 or later 
 #       - 0.6.1 for any function
 #       - 0.2.1 if you can skip -t mem / -t users
-#    - please note, as of v 0.6.x of this plugin
+#    - please note, as of v 0.6.x or later of this plugin
 #      it is based on psutil-0.6.x; some functions that worked
 #      with psutil-0.2.x (check_psinfo v0.2-0.4) 
 #    - see contrib/ or the folloqig link for ps-util-download
@@ -43,7 +44,7 @@
 #command[nrpe_check_ps_nio_if]=/etc/nagios/plugins/check_psinfo -t nio -n "$ARG1$"
 #command[nrpe_check_ps_nio_if_val]=/etc/nagios/plugins/check_psinfo -t nio -n "$ARG1$" -e "$ARG2"
 #command[nrpe_check_ps_nio_if_val_limits]=/etc/nagios/plugins/check_psinfo -t nio -n "$ARG1$" -e "$ARG2" -w "$ARG3" -c "$ARG4" 
-#command[nrpe_check_ps_ebury_rootkit]=sudo /etc/nagios/plugins/check_psinfo -t ebury [-e [lazy|strict|ebury] -p [debian|redhat|sles]]
+#command[nrpe_check_ps_ebury_rootkit]=sudo /etc/nagios/plugins/check_psinfo -t ebury [-e [lazy|strict|ebury] [ -p [debian|redhat|sles]] [ -f [user1,user2] ]
 
 #
 # SERVICES_CONFIG
@@ -216,28 +217,35 @@ TYPES
             if package-checks fails due to missing binary (debsums)
             or package-verify-errors, alsways produces critical
         -u  [user] www-user; defaults to www-data, if not given
-            checks shmem for given user
-        -e  [lazy|strict|ebury] - shmem-check: 
+            checks shmem for given user / or all, when called as root
+        -e  [lazy|strict|ebury] - shmem-check (defaults to ebury): 
             lazy: shmem is allowed, no check anyway
             strict: check against ebury & cdork-variants, might fp very
                     often, esp. when encrypted files are mounted or suphp
-                    is ised
+                    is used
             ebury: check for ebury-variant only (perm: 666), skip check
                    for cdork (perm 600)
             default: ebury
+        -f  [user1[,user2]] - filter out processes by user, usefull if you
+            run processes which uses shared memory, e.g. postgres or encrypted
+            partitions
+            default: off
+            
                    
         this check should be invoked using sudo and might have a certain FP-rate
         
         Known FP-Triggers:
           - postgres
-          - encrypted drives
+          - encrypted drives via userland
           - suphp
                   
         more infos: 
         see https://www.cert-bund.de/ebury-faq
             http://isc.sans.edu/diary/SSHD+rootkit+in+the+wild/15229
             https://github.com/eset/malware-ioc/tree/master/windigo
-            
+        
+        Usage:
+        ./check_psinfo -t ebury -p debian -f posgres,user1 -e strict
   
     -t iface  check if network_interface [ if ] is up, CRITICAL if not
         -n if  - give interface-name like eth0 / virbr0 etc, 
@@ -528,8 +536,8 @@ def psinfo_ebury():
   
   pkg = pv
   if pkg == "debian":
-    pkg_verify = "debsums"
-    pkgs = ["openssh-server", "openssh-client", "openssh-server:i386"]
+    pkg_verify = "/usr/bin/debsums"
+    pkgs = ["openssh-server", "openssh-client"]
   elif pkg == "redhat":
     pkg_verify = "rpm -V"
     pkgs = ["openssh", "openssh-clients", "openssh-server"]
@@ -540,40 +548,55 @@ def psinfo_ebury():
     pkgs = []
   
   print_debug("package-system: %s - %s" % (pkg, pkg_verify)) 
-  
+  log_out = sub.PIPE  
   for pack in pkgs:
-    res = os.popen("%s %s" %  ( pkg_verify, pack)).readlines()
-    if res != 0:
+    log_out = sub.PIPE
+    res = sub.Popen([pkg_verify, pack], 
+        stdout=log_out, 
+        stderr=log_out)
+    out,err = res.communicate()
+    pok = res.returncode
+      
+    if pok != 0:
       print_debug(" > package-error in: %s" % pack)
       return_status="CRITICAL"
       return_exit=2
       return_text="package verify error"
-      return_perfdata += "pckg.error: %s, " % (pack)
+      return_perfdata += "pckg.error: %s / %s,  " % (pack, err)
 
   # checking shmem
   
   if nio == "lazy":
     print_debug("lazy.skipping strict shmem-check") 
   else:
-    shmem = os.popen("ipcs -m | tail -n +4").readlines()
-    if len(shmem) > 0:
-      if return_status == "OK":
-        return_status="WARNING"
-        return_exit=1
-        return_text="shmem-check failed"
-        
-      return_perfdata += "shmem-entries: %s, " % (len(shmem))
-      print_debug("shmem: %s" % "\n".join(shmem))
-      
-      for l in shmem:
+    p1 = sub.Popen(["ipcs", "-m"], 
+            stdout=log_out, 
+            stderr=log_out)
+    out,err = p1.communicate()
+    out = out.split("\n")
+    print_debug("\n".join(out))
+    lc = []
+    dcount = 0
+    ecount = 0
+    if len(out) > 0:      
+      for l in out:
         v = l.split()
+        if len(v) < 5:
+          print_debug("> line to short, skipping %s" % l)
+          continue
         try:
           perm = int(v[3])
           byte = int(v[4])
+          user = v[2]
         except:
-          print_debug(l)
+          #print_debug(l)
+          continue
+        if user in filters:
+          print_debug("skipping user: %s" % user)
+          continue
         if perm == 666:
-          return_perfdata += "shmem.ebury.shared: %s," % (l)
+          ecount += 1
+          lc.append(l)
           if byte > 3000000:
             return_status="CRITICAL"
             return_exit=2
@@ -585,7 +608,8 @@ def psinfo_ebury():
               return_text="shmem-check failed"
         if nio == "strict":
           if perm == 600:
-            return_perfdata += "shmem.cdork.shared: %s," % (l)
+            dcount += 1
+            lc.append(l)
             if byte > 3000000:
               return_status="CRITICAL"
               return_exit=2
@@ -595,6 +619,17 @@ def psinfo_ebury():
                 return_status="WARNING"
                 return_exit=1
                 return_text="shmem-check failed"
+
+      if len(lc) > 0:
+        if return_status == "OK":
+          return_status="WARNING"
+          return_exit=1
+          return_text="shmem-check failed"
+        
+      return_perfdata += "shmem-entries=%s; ebury=%s; cdork=%s; %s, " % (len(lc), ecount, dcount,  "\n".join(lc))
+      #print_debug("shmem: %s" % ("\n".join(out)))
+
+    print_debug("> shmem-check: %s" % "\n".join(lc))
   return_result()
 
   
@@ -1127,10 +1162,11 @@ nio     = "all"
 iface   = "all"
 rtime   = "yes"    
 shmem_check_user = "www-data"
+filters = []
 
 
 try:
-    opts, args = getopt.getopt(sys.argv[1:], "s:c:w:t:p:l:r:i:n:e:u:hdzvR", 
+    opts, args = getopt.getopt(sys.argv[1:], "s:c:w:t:p:l:r:i:n:e:u:f:hdzvR", 
         ["help", "script", "debug" ])
 except getopt.GetoptError, err:
     # print help information and exit:
@@ -1169,6 +1205,10 @@ for o, a in opts:
 
     elif o == "-i":
         ip = "%s" % a 
+
+    elif o == "-f":
+        filters = a.split(",")
+        # for ebury-checks 
 
     elif o == "-n":
         ifd = "%s" % a 
