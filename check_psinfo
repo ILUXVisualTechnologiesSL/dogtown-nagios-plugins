@@ -216,8 +216,13 @@ TYPES
             or package-verify-errors, alsways produces critical
         -u  [user] www-user; defualts to www-data, if not given
             checks shmem for given user
-        -e  [lazy|strict] - shmem-check: lazy, shmem is allowed
-            defaults to strict
+        -e  [lazy|strict|ebury] - shmem-check: 
+            lazy: shmem is allowed, no check anyway
+            strict: check against ebury & cdork-variants, might fp very
+                    often, esp. when encrypted files are mounted or suphp
+                    is ised
+            ebury: check for ebury-variant only (perm: 666), skip check
+                   for cdork (perm 600)
 
         more infos: 
         see https://www.cert-bund.de/ebury-faq
@@ -558,7 +563,7 @@ def psinfo_ebury():
         except:
           print_debug(l)
         if perm == 666:
-          return_perfdata += "shmem.shared: %s," % (l)
+          return_perfdata += "shmem.ebury.shared: %s," % (l)
           if byte > 3000000:
             return_status="CRITICAL"
             return_exit=2
@@ -568,6 +573,18 @@ def psinfo_ebury():
               return_status="WARNING"
               return_exit=1
               return_text="shmem-check failed"
+        if nio != "ebury":
+          if perm == 600:
+            return_perfdata += "shmem.cdork.shared: %s," % (l)
+            if byte > 3000000:
+              return_status="CRITICAL"
+              return_exit=2
+              return_text="shmem-check failed"
+            else:
+              if return_status == "OK":
+                return_status="WARNING"
+                return_exit=1
+                return_text="shmem-check failed"
   return_result()
 
   
