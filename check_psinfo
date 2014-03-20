@@ -532,6 +532,18 @@ def psinfo_ebury():
   return_text="nothing suspicious found"
   return_perfdata = "ebury_checks: "
 
+  # version-check
+  req_version = (2,7)
+  cur_version = sys.version_info
+
+  if cur_version >= req_version:
+    return_status="WARNING"
+    return_exit=1
+    return_text="python-version not supported; required: %s, your version: %s,%s" % (req_version, cur_version[0], cur_version[1] )
+    return_perfdata = "ebury_checks: "
+
+    return_result 
+
   # checking for packages
   
   pkg = pv
