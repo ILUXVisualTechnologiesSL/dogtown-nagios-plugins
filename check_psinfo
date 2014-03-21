@@ -69,7 +69,7 @@
 #
 
 #
-version = "0.6.0.20.r101 - rc3 - 2014-03-20"
+version = "0.6.0.22.r104 - rc3 - 2014-03-20"
 
 
 import psutil as ps
