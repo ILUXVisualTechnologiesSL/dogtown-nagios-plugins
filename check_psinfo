@@ -8,7 +8,8 @@
 #
 # please note, some checks like users/net/cpu/iowait are linux-based
 # and *might* work on any *unix if you have the right programs installed
-#
+# 
+# Docs: check_psinfo.md
 #
 # Requirements:
 #    - python 2.5 or later
@@ -68,7 +69,7 @@
 #
 
 #
-version = "0.6.0.16.r87 - rc2 - 2014-03-11"
+version = "0.6.0.20.r101 - rc3 - 2014-03-20"
 
 
 import psutil as ps
@@ -83,6 +84,9 @@ return_exit=3
 return_text="no return (default)"
 return_perfdata="none"
 
+# for -t ebury
+debsums = "/usr/bin/debsums"
+rpm = "/bin/rpm"
 
 def psinfo_help():
     print """
@@ -532,26 +536,14 @@ def psinfo_ebury():
   return_text="nothing suspicious found"
   return_perfdata = "ebury_checks: "
 
-  # version-check
-  req_version = (2,7)
-  cur_version = sys.version_info
-
-  if cur_version >= req_version:
-    return_status="WARNING"
-    return_exit=1
-    return_text="python-version not supported; required: %s, your version: %s,%s" % (req_version, cur_version[0], cur_version[1] )
-    return_perfdata = "ebury_checks: "
-
-    return_result 
-
   # checking for packages
   
   pkg = pv
   if pkg == "debian":
-    pkg_verify = "/usr/bin/debsums"
+    pkg_verify = debsums 
     pkgs = ["openssh-server", "openssh-client"]
   elif pkg == "redhat":
-    pkg_verify = "rpm -V"
+    pkg_verify = rpm
     pkgs = ["openssh", "openssh-clients", "openssh-server"]
 
   else:
@@ -560,21 +552,31 @@ def psinfo_ebury():
     pkgs = []
   
   print_debug("package-system: %s - %s" % (pkg, pkg_verify)) 
+  prg = pkg_verify.split(" ")[0]
   log_out = sub.PIPE  
-  for pack in pkgs:
-    log_out = sub.PIPE
-    res = sub.Popen([pkg_verify, pack], 
-        stdout=log_out, 
-        stderr=log_out)
-    out,err = res.communicate()
-    pok = res.returncode
-      
-    if pok != 0:
-      print_debug(" > package-error in: %s" % pack)
-      return_status="CRITICAL"
-      return_exit=2
-      return_text="package verify error"
-      return_perfdata += "pckg.error: %s / %s,  " % (pack, err)
+  if os.path.isfile(pkg_verify) and os.access(pkg_verify, os.X_OK):
+    for pack in pkgs:
+      res = sub.Popen([pkg_verify, pack], 
+          stdout=log_out, 
+          stderr=log_out)
+      out,err = res.communicate()
+      pok = res.returncode
+        
+      if pok != 0:
+        print_debug(" > package-error in: %s" % pack)
+        return_status="CRITICAL"
+        return_exit=2
+        return_text="package verify error"
+        return_perfdata += "pckg.error: %s / %s,  " % (pack, err)
+
+  else:
+    print_debug(" > package-error: no bin found for %s" % pkg_verify)
+    return_status="WARNING"
+    return_exit=1
+    return_text="package verify error: no bin found for %s,  " % (pkg_verify)
+    return_perfdata += "pckg.error: no bin found for %s,  " % (pkg_verify)
+
+  
 
   # checking shmem
   
@@ -1253,7 +1255,20 @@ if len(sys.argv) == 1:
     sys.exit(0)
 
 
+# version-check
+req_version = (2,5)
+cur_version = sys.version_info
+if not cur_version >= req_version:
+  return_status="WARNING"
+  return_exit=1
+  return_text="python-version not supported; required: %s, your version: %s,%s" % (req_version, cur_version[0], cur_version[1] )
+  return_perfdata = "ebury_checks: "
+  
+  return_result 
+
 start_time = time.time()
+
+
 
 if ctype == "none":
     psinfo_help()
