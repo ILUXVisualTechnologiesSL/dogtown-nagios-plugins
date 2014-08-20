@@ -244,6 +244,7 @@ def print_debug(dtext):
 
 def calculate():
     rps = cps = dreq = dcon = 0
+    now = int(time.time())
     if result_file != 0:
         if not os.path.isfile(result_file):
             print_debug("no result_file found, creating with next run :: %s " % result_file)
@@ -268,7 +269,6 @@ def calculate():
                 o_writ  = int(ro[11])
                 o_wait  = int(ro[12])
                 o_ct    = int(ro[13])
-                now     = int(time.time())
                 last    = int(os.path.getmtime(result_file))
                 dtime   = now - last 
                 dreq    = req - int(o_req)
@@ -304,14 +304,14 @@ def calculate():
         try:
             print_debug("creating result_file.csv -> %s" % result_file)
             f = open(csv, "w")
-            f.write(""""active conns"; "accepted"; "handled"; "requests"; "req_errors"; "reqs per conn"; "reqs per sec"; "conns per sec"; "delta reqs"; "delta conns"; "reading"; "writing"; "waiting"; "checktime"; \n""")
+            f.write(""""timestamp"; "active conns"; "accepted"; "handled"; "requests"; "req_errors"; "reqs per conn"; "reqs per sec"; "conns per sec"; "delta reqs"; "delta conns"; "reading"; "writing"; "waiting"; "checktime"; \n""")
         except:
             print "ERR.cannot create result_file.csv :: %s \n use -r" % csv
 
     print_debug("writing result_file.csv -> %s.csv" % result_file)
     try:
         f = open(csv, "a")
-        f.write("%s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s;" % (ac, acc, han, req, err, rpc, rps, cps, dreq, dcon, read, writ, wait, ct))
+        f.write("%s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s;" % (now, ac, acc, han, req, err, rpc, rps, cps, dreq, dcon, read, writ, wait, ct))
         f.close()
     except:
         print "ERR.cannot write result_file.csv :: %s \n use -r" % csv 
