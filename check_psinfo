@@ -215,7 +215,7 @@ TYPES
         ***
 
     - t ebury -> checks for signs of the ebury rootkit using ipcs
-        -p  [debian|redhat] system for package -   [*] 
+        -p  [debian|redhat|sles] system for package -   [*] 
             verification (debsums / rpm -V)
             if omitted, no package-check is done
             if package-checks fails due to missing binary (debsums)
@@ -545,6 +545,9 @@ def psinfo_ebury():
   elif pkg == "redhat":
     pkg_verify = rpm
     pkgs = ["openssh", "openssh-clients", "openssh-server"]
+  elif pkg == "sles":
+    pkg_verify = rpm
+    pkgs = ["openssh"]
 
   else:
     print_debug("skipping pkg-verify") 
@@ -555,6 +558,10 @@ def psinfo_ebury():
   prg = pkg_verify.split(" ")[0]
   log_out = sub.PIPE  
   if os.path.isfile(pkg_verify) and os.access(pkg_verify, os.X_OK):
+    #
+    # deal with rpm -V detecting changes in /etc/ssh, GNARF!
+    # 
+    
     for pack in pkgs:
       res = sub.Popen([pkg_verify, pack], 
           stdout=log_out, 
