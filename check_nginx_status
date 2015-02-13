@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# (c) copyright 2012,2013 dogtown@mare-system.de
+# (c) copyright 2012-2015 dogtown@mare-system.de
 # 
 # License: GPL v2 
 #
@@ -16,6 +16,8 @@
 #   regis.leroy@gmail.com 
 #   http://exchange.nagios.org/directory/Plugins/Web-Servers/nginx/check_nginx_status-2Epl/details 
 #
+#   gustavo chaves for findinx and fixing some bugs
+#
 # reimplemented by dogtown with more features
 # 
 # TODO:
@@ -26,7 +28,7 @@
 
 import string, urllib2, getopt, sys, time, os
 
-version = "0.3.0.48 - rc-2 - 2013-07-02"
+version = "0.3.0.59 - rc-2 - 2015-02-02"
 
 ### default_values
 
@@ -172,15 +174,16 @@ Examples:
     only perfdata for that values
     ./check_nginx_status -H www.example.com -u /status  -w 10 -c 50 -o
     
-    check for active connections, alert on > 500/2000 active connections
-    ./check_nginx_status -H www.example.com -u /status -t active_conn -w 500 -c 2000
+    check for requests per second, alert on > 300/1000 active connections
+    ./check_nginx_status -H www.example.com -u /status -t rps -w 300 -c 1000
 
     Check for accepts_errors
     ./check_nginx_status -H www.example.com -t accepts_err -w 1 -c 50
 
 Performancedata:
     
-    NginxStatus.Check OK | ac=1;acc=64; han=64; req=64; err=0; rpc=1; rps=0; cps=0; dreq=1; dcon=1; read=0; writ=1; wait=0; ct=6ms;
+    NginxStatus.Check OK | ac=1;acc=64; han=64; req=64; err=0; rpc=1; rps=0; cps=0; dreq=1; 
+                           dcon=1; read=0; writ=1; wait=0; ct=6ms;
 
         ac      -> active connections
         acc     -> totally accepted connections
@@ -271,9 +274,15 @@ def calculate():
                 now     = int(time.time())
                 last    = int(os.path.getmtime(result_file))
                 dtime   = now - last 
-                dreq    = req - int(o_req)
+                if req >= o_req:
+                  dreq = req - o_req
+                else:
+                  dreq = req                
                 rps     = int(dreq / dtime)
-                dcon    = acc - int(o_acc)
+                if acc >= o_acc:
+                  dcon = acc - o_acc
+                else:
+                  dcon = acc
                 cps     = int(dcon / dtime)
 
             except:
@@ -294,7 +303,7 @@ def calculate():
     print_debug("writing result_file -> %s" % result_file)
     try:
         f = open(result_file, "w")
-        f.write("%s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s;" % (ac, acc, han, req, err, rpc, rps, cps, dreq, dcon, read, writ, wait, ct))
+        f.write("%s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s;\n" % (ac, acc, han, req, err, rpc, rps, cps, dreq, dcon, read, writ, wait, ct))
         f.close()
     except:
         print_debug("cannot create result_file :: %s \n use -r" % result_file)
