@@ -65,8 +65,7 @@ import getopt, sys, time, os, string
 import socket as sock 
 import subprocess as sub
 from subprocess import check_output
-from yaml import load as yload
-from yaml import dump as ydump
+
 import re
 
 # run-defaults
@@ -85,6 +84,13 @@ return_perfdata="none"
 
 lc_admin="/usr/bin/lc-admin"
 
+try:
+  from yaml import load as yload
+  from yaml import dump as ydump
+except:
+  print "ERROR> cannot load yaml"
+  sys.exit(2)
+  
 
 def check_lc_help():
     print """
