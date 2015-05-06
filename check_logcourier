@@ -58,7 +58,7 @@
 
 #
 
-version = "0.0.1.r104 - rc3 - 2015-04-20"
+version = "0.0.2.r1012 - alpha - 2015-04-20"
 
 
 import getopt, sys, time, os, string
@@ -127,6 +127,21 @@ MISC Options
     -v        version
     -h        help
 
+Examples
+  
+$ /etc/nagios/plugins/check_logcourier -t files
+
+LCourier.FILES Warning Stale Logfile: /var/log/fire.log (stat:Dead) , /var/log/fire.log (no harvester), 
+    /var/log/daemon.log[cur:3258615303/eof:3258611206], 
+    /var/log/syslog[cur:5863560473/eof:5863556782], 
+    /var/log/nginx/access.log (stat:Dead), /var/log/nginx/access.log (no harvester), 
+    /var/log/kern.log[cur:7133542680/eof:7133533586], 
+    /var/log/nginx/error.log (stat:Dead), 
+    /var/log/nginx/error.log (no harvester) | run_time=29.10ms; 
+
+$ /etc/nagios/plugins/check_logcourier 
+LCourier.STATUS OK Shipper Connected | lps=48.18; pub_lines=14393869; pending=0; timeouts=1; retrans=0; watched_files=9; active_files=9; run_time=31.37ms; 
+
 Requirements:
     - python 2.5 or later
     - python-yaml
@@ -135,6 +150,7 @@ Requirements:
 
 Remarks
     - ** -> not yet implemented 
+
 
  """
     
@@ -275,6 +291,92 @@ def check_lcadmin():
   #~ Timeouts: 0
   #~ Retransmissions: 0
   #~ """
+  
+  # james brown is dead
+  #~ lcadmin_res = """
+  #~ Log Courier version 1.6.3.gc967820 client
+#~ 
+#~ Attempting connection to tcp:127.0.0.1:1234...
+#~ Connected
+#~ 
+#~ "State: /var/log/auth.log (0xc208050b40)":
+  #~ Status: Running
+  #~ Harvester:
+    #~ Speed (Lps): 0.00
+    #~ Speed (Bps): 0.00
+    #~ Processed lines: 11478
+    #~ Current offset: 49236168
+    #~ Last EOF Offset: 49236168
+    #~ Status: Idle
+    #~ Dead timer: 23h59m10s
+#~ "State: /var/log/daemon.log (0xc208050ba0)":
+  #~ Status: Running
+  #~ Harvester:
+    #~ Speed (Lps): 23.00
+    #~ Speed (Bps): 725.26
+    #~ Processed lines: 4586446
+    #~ Current offset: 3258238077
+    #~ Last EOF Offset: 3258237563
+    #~ Status: Idle
+    #~ Dead timer: 23h59m58s
+#~ "State: /var/log/denyhosts (0xc208050cc0)":
+  #~ Status: Running
+  #~ Harvester:
+    #~ Speed (Lps): 0.00
+    #~ Speed (Bps): 0.00
+    #~ Processed lines: 579
+    #~ Current offset: 60020
+    #~ Last EOF Offset: 60020
+    #~ Status: Idle
+    #~ Dead timer: 23h41m22s
+#~ "State: /var/log/fire.log (0xc208050c00)":
+  #~ Status: Dead
+#~ "State: /var/log/kern.log (0xc208050a80)":
+  #~ Status: Running
+  #~ Harvester:
+    #~ Speed (Lps): 8.08
+    #~ Speed (Bps): 1508.64
+    #~ Processed lines: 5188246
+    #~ Current offset: 7132649586
+    #~ Last EOF Offset: 7132649025
+    #~ Status: Idle
+    #~ Dead timer: 23h59m58s
+#~ "State: /var/log/messages (0xc208050ae0)":
+  #~ Status: Running
+  #~ Harvester:
+    #~ Speed (Lps): 0.00
+    #~ Speed (Bps): 0.00
+    #~ Processed lines: 4
+    #~ Current offset: 540924038
+    #~ Last EOF Offset: 540924038
+    #~ Status: Idle
+    #~ Dead timer: 15h56m15s
+#~ "State: /var/log/nginx/access.log (0xc208050d20)":
+  #~ Status: Dead
+#~ "State: /var/log/nginx/error.log (0xc208050d80)":
+  #~ Status: Dead
+#~ "State: /var/log/syslog (0xc208050c60)":
+  #~ Status: Running
+  #~ Harvester:
+    #~ Speed (Lps): 23.00
+    #~ Speed (Bps): 754.41
+    #~ Processed lines: 4590130
+    #~ Current offset: 5863182501
+    #~ Last EOF Offset: 5863182501
+    #~ Status: Idle
+    #~ Dead timer: 23h59m58s
+#~ Prospector:
+  #~ Watched files: 9
+  #~ Active states: 9
+#~ Publisher:
+  #~ Status: Connected
+  #~ Speed (Lps): 13.28
+  #~ Published lines: 14376807
+  #~ Pending Payloads: 0
+  #~ Timeouts: 1
+  #~ Retransmissions: 0"""
+
+  
   lc_data = yload(lcadmin_res)
   return(lc_data)
 
@@ -339,7 +441,16 @@ def check_files():
         return_text = "Stale Logfile: %s (stat:%s) " % (f_name, files_d[f]["Status"] )
       else:
         return_text += ", %s (stat:%s)" % (f_name, files_d[f]["Status"] )
-      
+    
+    if not "Harvester" in files_d[f]:
+      return_status = "Warning"
+      return_exit = 1
+      if return_text == "All Logfiles at current state":
+        return_text = "Stale Logfile: %s (no harvester) " % (f_name)
+      else:
+        return_text += ", %s (no harvester)" % (f_name)
+      continue 
+    
     if files_d[f]["Harvester"]["Current offset"] == files_d[f]["Harvester"]["Last EOF Offset"]:
       continue
     else:
