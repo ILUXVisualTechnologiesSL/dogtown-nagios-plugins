@@ -1,0 +1,452 @@
+#!/usr/bin/env python
+#
+# check_logcourier - nagios-plugin for https://github.com/driskell/log-courier
+#
+# (c) copyright 2015 dogtown@mare-system.de
+#
+# dload: https://bitbucket.org/maresystem/dogtown-nagios-plugins/src
+#
+# 
+# Docs: check_logcourier -h 
+#
+# Requirements:
+#    - python 2.5 or later
+#    - python-yaml
+#    - log-courier (obviously)
+#    - lc-admin 
+#
+#
+#
+#NRPE_Config
+#
+#command[nrpe_check_lc_status]=/etc/nagios/plugins/check_logcourier -t status
+#command[nrpe_check_lc_files]=/etc/nagios/plugins/check_logcourier -t files
+#command[nrpe_check_lc]=/etc/nagios/plugins/check_logcourier -t "$ARG1" 
+
+#
+# SERVICES_CONFIG
+# this one is ok to run 3/1/5
+# define  service {
+#         host_name               check_host
+#         service_description     lc_status
+#         check_command           check_nrpe!nrpe_check_lc_status
+#         use                     generic-service
+#         register                1
+#         normal_check_interval   3
+#         retry_check_interval    1
+#         max_check_attempts      5
+#
+# }
+
+# usually you shoudl allow 15 minutes to recover files from 
+# baclklog
+# define  service {
+#         host_name               check_host
+#         service_description     lc_files
+#         check_command           check_nrpe!nrpe_check_lc_files
+#         use                     generic-service
+#         register                1
+#         normal_check_interval   3
+#         retry_check_interval    1
+#         max_check_attempts      15
+#
+# }
+
+
+
+#
+
+#
+
+version = "0.0.1.r104 - rc3 - 2015-04-20"
+
+
+import getopt, sys, time, os, string
+import socket as sock 
+import subprocess as sub
+from subprocess import check_output
+from yaml import load as yload
+from yaml import dump as ydump
+import re
+
+# run-defaults
+debug = "no"
+ctype = "status"
+
+# lc-defaults
+host    = "127.0.0.1"
+port    = "1234"
+
+# return-defaults
+return_status="UNKNOWN"
+return_exit=3
+return_text="no return (default)"
+return_perfdata="none"
+
+lc_admin="/usr/bin/lc-admin"
+
+
+def check_lc_help():
+    print """
+
+check_logcourier
+    nagios_plugin to check log-courier, a cool logshipper for logstash
+    log-courier is here: https://github.com/driskell/log-courier
+    
+USAGE
+    check_logcourier -t [type] [options]
+    
+TYPES
+    -t status   - global status
+                  reads from Publisher/Prospector-Sections
+                  warning if Prospector watched_files != active states
+                  critical only if Status != Connected
+                  -wp XX - warning if pending payloads >= XX (number) **
+                  -cp YY - critical if pending payloads => YY (number) **
+                  -wt XX - warning if timeouts >= XX (number) **
+                  -ct YY - critical if timeouts >= XX (number) **
+                  returns perfdata from Publisher 
+
+    -t files    - check for state of transferred files; at the moment just
+                  checks for file in FILES, if current offset == last eof offset
+                  TODO: detect stale/dead files 
+
+MISC Options
+    -R          - suppress run_time informations
+  
+    -H [IP]     - Host/IP to connect to, default: 127.0.0.1
+    -p [PORT]   - port to connect to (default: 1234 
+  
+    -d        debug
+    -v        version
+    -h        help
+
+Requirements:
+    - python 2.5 or later
+    - python-yaml
+    - log-courier (obviously)
+    - lc-admin 
+
+Remarks
+    - ** -> not yet implemented 
+
+ """
+    
+    print """
+    Version: %s
+    """ % version
+
+def return_result():
+  end_time = time.time()
+  run_time = str((end_time - start_time) * 1000 ).split(".")
+  r1 = run_time[0]
+  r2 = run_time[1][0:2]
+  run_time = "%s.%s" % (r1, r2)
+  if return_perfdata == "none":
+    if rtime == "no":
+      perfdata = ""
+    else:
+      perfdata = "| run_time=%sms;" % run_time
+  else:
+    perfdata = " | %s " % return_perfdata
+    if rtime ==  "yes":
+      if return_perfdata[-1] != ";":
+        perfdata = "| %s; run_time=%sms;" % (return_perfdata, run_time)
+      else:
+        perfdata = "| %s run_time=%sms;" % (return_perfdata, run_time)
+  print "LCourier.%s %s %s %s " % (ctype.upper(), return_status, return_text, perfdata)
+  sys.exit(return_exit)
+
+
+def check_lcadmin():
+  global return_status, return_text, return_perfdata, return_exit
+  # version-check
+  v_27 = (2,7)
+  cur_version = sys.version_info[0:2]
+  lc_cmd = [lc_admin, '-connect=%s' % connection,  'status']
+  if v_27 >= cur_version:    
+    try:
+      out =  check_output(lc_cmd)
+    except:
+      return_status = "CRITICAL"
+      return_text = "Shipper not Running? (check connection and run 'lc-admin status' to debug)"
+      return_exit = 2
+      return_result()
+  else:
+    p = sub.Popen(lc_cmd, stdout=sub.PIPE)
+    out, err = p.communicate()
+    if err:
+      return_status = "CRITICAL"
+      return_text = "Shipper not Running?  (check connection and run 'lc-admin status' to debug)"
+      return_exit = 2
+      return_result()
+  
+  failed_conn = re.search("Failed to connect(.*)%s:%s(.*)connection refused" % (host, port), out, re.I)
+  if failed_conn:
+    return_status = "CRITICAL"
+    return_text = "Shipper running but cannot connect (connection refused)"
+    return_exit = 2
+    return_result()
+
+    
+
+  # blood f*ckin stupid hack
+  out.split("\n")
+  o_s = 0
+  for line in out.split("\n"):
+    o_s += 1
+    if line.find("Connected") > -1:
+      break
+  out = "\n".join(out.split("\n")[o_s:-1]).strip()
+
+  
+  
+  lcadmin_res = out
+  
+  
+      
+  #~ lcadmin_res = """
+#~ "State: /var/log/auth.log (0xc20804e1e0)":
+  #~ Status: Running
+  #~ Harvester:
+    #~ Speed (Lps): 0.00
+    #~ Speed (Bps): 0.00
+    #~ Processed lines: 6337
+    #~ Current offset: 6958819
+    #~ Last EOF Offset: 6958819
+    #~ Status: Idle
+    #~ Dead timer: 23h58m51s
+#~ "State: /var/log/daemon.log (0xc20804e420)":
+  #~ Status: Dead
+#~ "State: /var/log/denyhosts (0xc20804f020)":
+  #~ Status: Running
+  #~ Harvester:
+    #~ Speed (Lps): 0.00
+    #~ Speed (Bps): 0.00
+    #~ Processed lines: 405
+    #~ Current offset: 36575
+    #~ Last EOF Offset: 36575
+    #~ Status: Idle
+    #~ Dead timer: 23h58m29s
+#~ "State: /var/log/kern.log (0xc20804e4e0)":
+  #~ Status: Running
+  #~ Harvester:
+    #~ Speed (Lps): 0.00
+    #~ Speed (Bps): 0.00
+    #~ Processed lines: 15015
+    #~ Current offset: 66042058
+    #~ Last EOF Offset: 66042058
+    #~ Status: Idle
+    #~ Dead timer: 23h58m51s
+#~ "State: /var/log/messages (0xc20804e900)":
+  #~ Status: Running
+  #~ Harvester:
+    #~ Speed (Lps): 0.00
+    #~ Speed (Bps): 0.00
+    #~ Processed lines: 15018
+    #~ Current offset: 65996954
+    #~ Last EOF Offset: 65996954
+    #~ Status: Idle
+    #~ Dead timer: 23h58m51s
+#~ "State: /var/log/syslog (0xc20804e960)":
+  #~ Status: Running
+  #~ Harvester:
+    #~ Speed (Lps): 0.00
+    #~ Speed (Bps): 0.00
+    #~ Processed lines: 53009
+    #~ Current offset: 100965445
+    #~ Last EOF Offset: 100965445
+    #~ Status: Idle
+    #~ Dead timer: 23h59m9s
+#~ Prospector:
+  #~ Watched files: 6
+  #~ Active states: 6
+#~ Publisher:
+  #~ Status: Connected
+  #~ Speed (Lps): 0.00
+  #~ Published lines: 89787
+  #~ Pending Payloads: 0
+  #~ Timeouts: 0
+  #~ Retransmissions: 0
+  #~ """
+  lc_data = yload(lcadmin_res)
+  return(lc_data)
+
+def check_status():
+
+  global return_status, return_text, return_perfdata, return_exit
+  
+  pub_d = check_data["Publisher"]
+  prosp_d = check_data["Prospector"]
+  
+  if pub_d["Status"] != "Connected":
+    return_status = "CRITICAL"
+    return_text = "Shipper not Connected"
+    return_exit = 2
+    return()
+  else:
+    return_status = "OK"
+    return_text = "Shipper Connected"
+    return_exit = 0
+
+  # here checks for wp/cp/wt/ct and perfdata
+
+  
+  lps = pub_d["Speed (Lps)"]
+  plines = pub_d["Published lines"]
+  pending = pub_d["Pending Payloads"]
+  timeouts = pub_d["Timeouts"]
+  retrans = pub_d["Retransmissions"]
+  return_perfdata = "lps=%s; pub_lines=%s; pending=%s; timeouts=%s; retrans=%s; " % (lps, plines, pending, timeouts, retrans)
+  
+  if prosp_d["Watched files"] != prosp_d["Active states"]:
+    return_status = "WARNING"
+    return_text = "Shipper Connected, but watched files != active files"
+    return_exit = 1
+  return_perfdata += "watched_files=%s; active_files=%s;" % (prosp_d["Watched files"], prosp_d["Active states"])
+  
+  
+
+def check_files():
+
+  global return_status, return_text, return_perfdata, return_exit
+
+  files_d = {}
+  for d in check_data:
+    if d in ("Publisher", "Prospector"):
+      continue
+    files_d[d] = check_data[d]
+
+  return_status = "OK"
+  return_text = "All Logfiles at current state"
+  return_exit = 0
+
+  
+  for f in files_d:
+    f_name = f.split(" ")[1]
+    #print f
+    #print files_d[f]
+    if files_d[f]["Status"] != "Running":
+      return_status = "Warning"
+      return_exit = 1
+      if return_text == "All Logfiles at current state":
+        return_text = "Stale Logfile: %s (stat:%s) " % (f_name, files_d[f]["Status"] )
+      else:
+        return_text += ", %s (stat:%s)" % (f_name, files_d[f]["Status"] )
+      
+    if files_d[f]["Harvester"]["Current offset"] == files_d[f]["Harvester"]["Last EOF Offset"]:
+      continue
+    else:
+      return_status = "Warning"
+      return_exit = 1
+      if return_text == "All Logfiles at current state":
+        return_text = "Stale Logfile: %s [cur:%s/eof:%s]" % (f_name, files_d[f]["Harvester"]["Current offset"], files_d[f]["Harvester"]["Last EOF Offset"])
+      else:
+        return_text += ", %s[cur:%s/eof:%s]" % (f_name, files_d[f]["Harvester"]["Current offset"], files_d[f]["Harvester"]["Last EOF Offset"])
+      
+  
+  
+
+def print_debug(txt):
+  if debug == "yes":
+    print "[d] - %s" % txt
+
+    
+    
+wv      = "no"
+cv      = "no"
+pv      = "no"
+lv      = "no"
+rv      = "no"
+ip      = "no"
+ifd     = "eth0"
+nio     = "all"
+iface   = "all"
+rtime   = "yes"    
+
+
+
+filters = []
+
+
+try:
+  opts, args = getopt.getopt(sys.argv[1:], "H:s:c:w:t:p:l:r:i:n:e:u:f:hdzvR", 
+      ["help", "script", "debug" ])
+except getopt.GetoptError, err:
+  # print help information and exit:
+  print str(err) # will print something like "option -a not recognized"
+  check_lc_help()
+  sys.exit(2)
+
+
+
+for o, a in opts:
+  #print "o :: " + o + "   <-->  a: " + a
+  if o in ("-h", "--help"):
+    check_lc_help()
+    sys.exit()
+      
+
+  elif o in ("-w", "--warning"):
+    wv = "%s" % a
+  elif o in ("-c", "--critical"):
+    cv = "%s" % a
+      
+  elif o == "-t":
+    ctype = "%s" % a
+
+  elif o == "-d":
+    debug = "yes"
+
+  elif o == "-p":
+    port = "%s" % a 
+
+  elif o == "-H":
+    host = "%s" % a 
+          
+  elif o == "-R":
+    rtime = "no" 
+          
+  else:
+    check_lc_help()
+    sys.exit(2)        
+
+
+
+# version-check
+req_version = (2,5)
+cur_version = sys.version_info
+if not cur_version >= req_version:
+  return_status="WARNING"
+  return_exit=1
+  return_text="python-version not supported; required: %s, your version: %s,%s" % (req_version, cur_version[0], cur_version[1] )
+  return_perfdata = "logcourier: "
+  
+  return_result 
+
+start_time = time.time()
+
+connection = "tcp:%s:%s" % (host, port)
+
+
+check_data = check_lcadmin()
+
+#print check_data
+
+
+if ctype == "none":
+  check_lc_help()
+  sys.exit(0)
+
+elif ctype == "status":
+  check_status()
+  return_result()
+
+elif ctype == "files":
+  check_files()
+  return_result()
+
+else:
+  check_lc_help()
+  sys.exit(2)
+    
