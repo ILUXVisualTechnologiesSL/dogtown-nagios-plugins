@@ -38,8 +38,8 @@
 #
 # }
 
-# usually you shoudl allow 15 minutes to recover files from 
-# baclklog
+# usually you should allow 15 minutes to recover files from 
+# delays
 # define  service {
 #         host_name               check_host
 #         service_description     lc_files
