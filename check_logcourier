@@ -481,7 +481,7 @@ def check_files():
   
   return_perfdata = "f_ok=%s; f_nok=%s;" % (f_ok, f_nok)
   for fdiff in f_diff:
-    return_perfdata += "%s=%s; " % (fdiff, f_dif[fdiff])
+    return_perfdata += "%s=%s; " % (fdiff, f_diff[fdiff])
   
   
   
