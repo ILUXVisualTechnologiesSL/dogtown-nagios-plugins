@@ -58,7 +58,7 @@
 
 #
 
-version = "0.0.2.r1012 - alpha - 2015-04-20"
+version = "0.0.4.r116 - alpha - 2015-05-20"
 
 
 import getopt, sys, time, os, string
@@ -116,6 +116,7 @@ TYPES
     -t files    - check for state of transferred files; at the moment just
                   checks for file in FILES, if current offset == last eof offset
                   TODO: detect stale/dead files 
+    -D            ignore dead files (default: dont ignore)
 
 MISC Options
     -R          - suppress run_time informations
@@ -429,18 +430,29 @@ def check_files():
   return_text = "All Logfiles at current state"
   return_exit = 0
 
+  f_ok = 0
+  f_nok = 0
+  f_diff = {}
   
   for f in files_d:
     f_name = f.split(" ")[1]
+    f_diff[f_name] = 0
     #print f
     #print files_d[f]
     if files_d[f]["Status"] != "Running":
+      if files_d[f]["Status"] == "Dead":
+        if ingore_dead == "yes":
+          continue 
+      f_status = 1
       return_status = "Warning"
       return_exit = 1
       if return_text == "All Logfiles at current state":
         return_text = "Stale Logfile: %s (stat:%s) " % (f_name, files_d[f]["Status"] )
       else:
         return_text += ", %s (stat:%s)" % (f_name, files_d[f]["Status"] )
+
+    f_nok += 1
+
     
     if not "Harvester" in files_d[f]:
       return_status = "Warning"
@@ -452,15 +464,26 @@ def check_files():
       continue 
     
     if files_d[f]["Harvester"]["Current offset"] == files_d[f]["Harvester"]["Last EOF Offset"]:
+      f_nok -= 1
+      f_ok += 1
+      f_diff[f_name] = 0 
       continue
     else:
+      diff =  files_d[f]["Harvester"]["Last EOF Offset"] - files_d[f]["Harvester"]["Current offset"]
+      f_diff[f_name] = diff 
       return_status = "Warning"
       return_exit = 1
       if return_text == "All Logfiles at current state":
-        return_text = "Stale Logfile: %s [cur:%s/eof:%s]" % (f_name, files_d[f]["Harvester"]["Current offset"], files_d[f]["Harvester"]["Last EOF Offset"])
+        return_text = "Stale Logfile: %s [diff:%s/cur:%s/eof:%s]" % (f_name, diff, files_d[f]["Harvester"]["Current offset"], files_d[f]["Harvester"]["Last EOF Offset"])
       else:
-        return_text += ", %s[cur:%s/eof:%s]" % (f_name, files_d[f]["Harvester"]["Current offset"], files_d[f]["Harvester"]["Last EOF Offset"])
-      
+        return_text += ", %s[diff:%s/cur:%s/eof:%s]" % (f_name, diff, files_d[f]["Harvester"]["Current offset"], files_d[f]["Harvester"]["Last EOF Offset"])
+  
+  
+  return_perfdata = "f_ok=%s; f_nok=%s;" % (f_ok, f_nok)
+  for fdiff in f_diff:
+    return_perfdata += "%s=%s; " % (fdiff, f_dif[fdiff])
+  
+  
   
   
 
@@ -480,6 +503,7 @@ ifd     = "eth0"
 nio     = "all"
 iface   = "all"
 rtime   = "yes"    
+ignore_dead = "no"
 
 
 
@@ -487,7 +511,7 @@ filters = []
 
 
 try:
-  opts, args = getopt.getopt(sys.argv[1:], "H:s:c:w:t:p:l:r:i:n:e:u:f:hdzvR", 
+  opts, args = getopt.getopt(sys.argv[1:], "H:s:c:w:t:p:l:r:i:n:e:u:f:hdzvRD", 
       ["help", "script", "debug" ])
 except getopt.GetoptError, err:
   # print help information and exit:
@@ -514,6 +538,8 @@ for o, a in opts:
 
   elif o == "-d":
     debug = "yes"
+  elif o == "-D":
+    ignore_dead = "yes"
 
   elif o == "-p":
     port = "%s" % a 
