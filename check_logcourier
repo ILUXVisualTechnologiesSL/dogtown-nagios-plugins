@@ -53,12 +53,7 @@
 # }
 
 
-
-#
-
-#
-
-version = "0.0.4.r116 - alpha - 2015-05-20"
+version = "0.0.5.r116 - alpha - 2015-05-20"
 
 
 import getopt, sys, time, os, string
@@ -469,7 +464,7 @@ def check_files():
       f_diff[f_name] = 0 
       continue
     else:
-      diff =  files_d[f]["Harvester"]["Last EOF Offset"] - files_d[f]["Harvester"]["Current offset"]
+      diff =  files_d[f]["Harvester"]["Current offset"] - files_d[f]["Harvester"]["Last EOF Offset"]
       f_diff[f_name] = diff 
       return_status = "Warning"
       return_exit = 1
