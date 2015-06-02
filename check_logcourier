@@ -436,7 +436,7 @@ def check_files():
     #print files_d[f]
     if files_d[f]["Status"] != "Running":
       if files_d[f]["Status"] == "Dead":
-        if ingore_dead == "yes":
+        if ignore_dead == "yes":
           continue 
       f_status = 1
       return_status = "Warning"
