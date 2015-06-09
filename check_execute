@@ -1,0 +1,85 @@
+#!/usr/bin/env python
+#
+# nagios_plugin to check for an external script to run, based on
+#               return_values
+# (c) copyright 2013-2015 mare-system.de
+# c: dogtown--[_at_]--mare-system--(dot)--de
+#
+# dload: https://bitbucket.org/maresystem/dogtown-nagios-plugins/src
+#
+# v0.0.8 - 2015-01-13
+#
+##############################################################################
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# 
+# for more info see License.txt
+#
+##############################################################################
+#
+
+import os, sys, time
+import subprocess as sub
+
+EXIT_STATUS=3
+EXIT_TEXT="UNKNOWN"
+PERF_DATA=""
+cmd="..."
+
+def usage():
+  
+  print """
+
+USAGE: 
+  %s [script]
+  %s ["script --with --some --args -x"]
+  
+  """ % (sys.argv[0], sys.argv[0])
+
+def return_exit():
+  print "Check_Exec: %s" % (EXIT_TEXT)
+  sys.exit(EXIT_STATUS)
+
+if len(sys.argv) < 2:
+  usage()
+  sys.exit(2)
+
+# nice one:  http://stackoverflow.com/questions/11269575/how-to-hide-output-of-subprocess-in-python-2-7
+FNULL = open(os.devnull, 'w')
+
+cmd = [" ".join(sys.argv[1:]), " > /dev/null"]
+#cmd = "%s > /dev/null" % sys.argv[1]
+cmd_txt = sys.argv[1]
+  
+  
+try:
+  state = sub.check_call(cmd, stdout=FNULL, stderr=sub.STDOUT)
+except:
+  EXIT_STATUS = 2
+  EXIT_TEXT = "ERROR: Unknown Error or File not Found while executing: %s" % cmd_txt
+  return_exit()
+
+if state == 0:
+  EXIT_STATUS = 0
+  EXIT_TEXT = "OK Successfully Executed: %s" % cmd_txt
+  return_exit()
+
+else:
+  EXIT_STATUS = 1
+  EXIT_TEXT = "WARNING Some Problems occured while executing: %s / Return_State: %s" % (cmd_txt, state)
+  return_exit()
+
+return_exit()
+  
